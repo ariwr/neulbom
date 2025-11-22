@@ -7,7 +7,7 @@ import { colors } from '../styles/design-tokens';
 import { ChevronLeft } from 'lucide-react';
 
 interface SignupProps {
-  onNavigate?: (page: string) => void;
+  onNavigate: (page: string) => void;
 }
 
 export function Signup({ onNavigate }: SignupProps) {
@@ -154,7 +154,15 @@ export function Signup({ onNavigate }: SignupProps) {
             />
 
             <div className="pt-4">
-              <Button variant="primary" size="lg" fullWidth>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                onClick={() => {
+                  // 나중에 여기서 실제 회원가입 API 호출(onSignup(formData)) 들어갈 자리
+                  onNavigate('login');      // 회원가입 후 로그인 페이지로 이동
+                }}
+                >
                 가입하기
               </Button>
             </div>

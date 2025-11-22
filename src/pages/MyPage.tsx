@@ -4,20 +4,16 @@ import { Card } from '../components/ui/ThemedCard';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/ThemedButton';
 import { colors } from '../styles/design-tokens';
+import type { Welfare } from '../services/welfareService';
 
 interface MyPageProps {
   onNavigate?: (page: string) => void;
+  bookmarkedWelfares: Welfare[];
 }
 
-export function MyPage({ onNavigate }: MyPageProps) {
+export function MyPage({ onNavigate, bookmarkedWelfares }: MyPageProps) {
   const userLevel = 2;
   const levelProgress = 65; // percentage
-
-  const bookmarkedWelfare = [
-    { title: '노인 장기요양보험', date: '2025.11.20' },
-    { title: '장애인 활동지원 서비스', date: '2025.11.19' },
-    { title: '가족돌봄 휴가제도', date: '2025.11.18' },
-  ];
 
   const chatHistory = [
     { title: '복지 서비스 문의', date: '2025.11.20' },
@@ -179,8 +175,13 @@ export function MyPage({ onNavigate }: MyPageProps) {
               </button>
             </div>
 
+            {bookmarkedWelfares.length === 0 ? (
+              <p className="text-xs" style={{ color: colors.textSub}} >
+                아직 북마크한 복지 정보가 없습니다.
+              </p>
+            ) : (
             <div className="space-y-2">
-              {bookmarkedWelfare.map((item, index) => (
+              {bookmarkedWelfares.map((item, index) => (
                 <div 
                   key={index}
                   className="p-3 rounded-lg flex items-center justify-between cursor-pointer hover:opacity-80 transition-opacity"
@@ -196,6 +197,7 @@ export function MyPage({ onNavigate }: MyPageProps) {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </Card>
 

@@ -5,51 +5,21 @@ import { Button } from '../components/ui/ThemedButton';
 import { Badge } from '../components/ui/Badge';
 import { PostCard } from '../components/PostCard';
 import { colors } from '../styles/design-tokens';
+import type { Post } from '../services/postService';
 
 interface CommunityProps {
+  posts: Post[];
   onNavigate?: (page: string) => void;
+  onPostClick?: (id: number) => void;
 }
 
-export function Community({ onNavigate }: CommunityProps) {
+export function Community({ posts, onNavigate, onPostClick }: CommunityProps) {
   const [activeTab, setActiveTab] = useState('all');
 
   const tabs = [
     { id: 'all', label: '전체' },
     { id: 'popular', label: '인기글' },
     { id: 'recent', label: '최신글' },
-  ];
-
-  const posts = [
-    {
-      title: '노인 돌봄 경험 공유합니다',
-      preview: '부모님 돌봄을 시작한 지 3년째입니다. 처음에는 많이 힘들었지만 지금은 여러 복지 서비스를 통해 많은 도움을 받고 있습니다...',
-      tags: ['노인돌봄', '경험공유'],
-      date: '2025.11.22',
-      commentCount: 15,
-    },
-    {
-      title: '장애인 활동지원 서비스 후기',
-      preview: '활동지원사님이 오시면서 많은 부담이 줄었어요. 같은 상황의 분들께 도움이 되길 바라며 후기 남깁니다...',
-      tags: ['장애인지원', '후기'],
-      date: '2025.11.21',
-      commentCount: 8,
-      hasCrisisFlag: false,
-    },
-    {
-      title: '요즘 너무 힘들어요',
-      preview: '돌봄을 하다 보니 제 시간이 없고, 친구들도 만나지 못하고... 우울한 기분이 계속됩니다...',
-      tags: ['고민상담'],
-      date: '2025.11.21',
-      commentCount: 23,
-      hasCrisisFlag: true,
-    },
-    {
-      title: '지역별 돌봄센터 정보 정리',
-      preview: '서울 지역 돌봄센터 정보를 정리해봤습니다. 필요하신 분들께 도움이 되면 좋겠습니다...',
-      tags: ['정보공유', '서울'],
-      date: '2025.11.20',
-      commentCount: 12,
-    },
   ];
 
   return (
@@ -145,16 +115,19 @@ export function Community({ onNavigate }: CommunityProps) {
 
         {/* Post List */}
         <div className="space-y-4">
-          {posts.map((post, index) => (
+          {posts.map((post) => (
             <PostCard
-              key={index}
+              key={post.id}
               title={post.title}
               preview={post.preview}
               tags={post.tags}
               date={post.date}
               commentCount={post.commentCount}
               hasCrisisFlag={post.hasCrisisFlag}
-              onClick={() => onNavigate?.('post-detail')}
+              onClick={() => {
+                // 선택된 게시글 id를 상위(App)로 알려주고 페이지 전환
+                onPostClick?.(post.id);
+              }}
             />
           ))}
         </div>

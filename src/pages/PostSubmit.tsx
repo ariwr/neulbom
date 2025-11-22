@@ -8,10 +8,11 @@ import { Badge } from '../components/ui/Badge';
 import { colors } from '../styles/design-tokens';
 
 interface PostSubmitProps {
-  onNavigate?: (page: string) => void;
+  onNavigate: (page: string) => void;
+  onSubmit: (data: {title: string; preview: string; tags: string[] }) => void;
 }
 
-export function PostSubmit({ onNavigate }: PostSubmitProps) {
+export function PostSubmit({ onNavigate, onSubmit }: PostSubmitProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -25,7 +26,7 @@ export function PostSubmit({ onNavigate }: PostSubmitProps) {
       <div className="bg-white border-b sticky top-16 z-30" style={{ borderColor: colors.lightGray }}>
         <div className="max-w-4xl mx-auto px-4 py-4">
           <button
-            onClick={() => onNavigate?.('community')}
+            onClick={() => onNavigate('community')}
             className="flex items-center space-x-2 hover:opacity-70 transition-opacity"
             style={{ color: colors.textDark }}
           >
@@ -110,10 +111,28 @@ export function PostSubmit({ onNavigate }: PostSubmitProps) {
             </Card>
 
             <div className="flex items-center space-x-3">
-              <Button variant="primary" size="lg" fullWidth>
+              <Button variant="primary"
+              size="lg"
+              fullWidth
+              onClick={() => {
+                // 간단한 유효성 검사
+                if (!title.trim() || !content.trim()) {
+                  alert('제목과 내용을 입력해주세요.');
+                  return
+                }
+
+                onSubmit({
+                  title,
+                  preview: content,
+                  tags,
+                });
+
+                onNavigate('community')
+              }}
+              >
                 게시하기
               </Button>
-              <Button variant="outline" size="lg" onClick={() => onNavigate?.('community')}>
+              <Button variant="outline" size="lg" onClick={() => onNavigate('community')}>
                 취소
               </Button>
             </div>
