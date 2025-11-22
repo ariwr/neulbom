@@ -4,12 +4,17 @@ import { Card } from '../components/ui/ThemedCard';
 import { Button } from '../components/ui/ThemedButton';
 import { WelfareCard } from '../components/WelfareCard';
 import { colors } from '../styles/design-tokens';
+import type { Welfare } from '../services/welfareService';
+import { FormItem } from '../components/ui/form';
 
 interface HomeProps {
   onNavigate?: (page: string) => void;
+  welfares: Welfare[];
+  bookmarkedIds: number[];
+  onToggleBookmark: (id: number) => void;
 }
 
-export function Home({ onNavigate }: HomeProps) {
+export function Home({ onNavigate, welfares, bookmarkedIds, onToggleBookmark }: HomeProps) {
   const quickAccess = [
     { icon: MessageCircle, label: 'AI 챗봇', color: colors.mainGreen1, page: 'chat' },
     { icon: Gift, label: '복지 검색', color: colors.mainGreen2, page: 'welfare' },
@@ -109,24 +114,17 @@ export function Home({ onNavigate }: HomeProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <WelfareCard
-            title="노인 돌봄 서비스 지원"
-            summary="만 65세 이상 어르신을 대상으로 일상생활 지원 서비스를 제공합니다."
-            eligibility={['65세 이상', '기초생활수급자']}
-            onClick={() => onNavigate?.('welfare-detail')}
-          />
-          <WelfareCard
-            title="장애인 활동지원 서비스"
-            summary="신체적·정신적 장애로 혼자 일상생활이 어려운 분들을 위한 활동 지원"
-            eligibility={['장애인', '소득기준 충족']}
-            onClick={() => onNavigate?.('welfare-detail')}
-          />
-          <WelfareCard
-            title="가족돌봄 휴가제도"
-            summary="가족 구성원의 질병, 사고 등으로 돌봄이 필요한 경우 사용 가능한 휴가"
-            eligibility={['근로자', '가족돌봄 필요']}
-            onClick={() => onNavigate?.('welfare-detail')}
-          />
+          {welfares.slice(0, 4).map((welfare) => (
+            <WelfareCard
+              key={welfare.id}
+              title={welfare.title}
+              summary={welfare.summary}
+              eligibility={welfare.eligibility}
+              isBookmarked={bookmarkedIds.includes(welfare.id)}
+              onBookmark={() => onToggleBookmark(welfare.id)}
+              onClick={() => onNavigate?.('welfare-detail')}
+            />
+          ))}
         </div>
       </section>
 

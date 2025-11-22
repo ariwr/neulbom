@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { CSSProperties } from 'react';
 import { colors } from '../../styles/design-tokens';
 
 interface CardProps {
@@ -6,7 +6,8 @@ interface CardProps {
   variant?: 'default' | 'elevated' | 'outlined';
   padding?: 'sm' | 'md' | 'lg';
   className?: string;
-  onClick?: () => void;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  style?: CSSProperties;
 }
 
 export function Card({ 
@@ -14,7 +15,7 @@ export function Card({
   variant = 'default',
   padding = 'md',
   className = '',
-  onClick 
+  onClick,
 }: CardProps) {
   const paddingClasses = {
     sm: 'p-4',

@@ -5,7 +5,7 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
   fullWidth?: boolean;
   icon?: React.ReactNode;
@@ -45,7 +45,7 @@ export function Button({
   const borderColors = {
     primary: 'transparent',
     secondary: 'transparent',
-    outline: colors.mainGreen1,
+    outline: colors.mainGreen2,
     ghost: 'transparent',
   };
 

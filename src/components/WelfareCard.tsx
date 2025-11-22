@@ -10,6 +10,7 @@ interface WelfareCardProps {
   summary: string;
   eligibility: string[];
   isBookmarked?: boolean;
+  // 이벤트를 인자로 받을 수 있도록 타입 수정
   onBookmark?: () => void;
   onClick?: () => void;
 }
@@ -23,7 +24,11 @@ export function WelfareCard({
   onClick,
 }: WelfareCardProps) {
   return (
-    <Card variant="elevated" onClick={onClick}>
+    <Card
+      variant="elevated"
+      // Card 자체도 클릭 가능 (상세로 이동 등)
+      onClick={onClick}
+    >
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -31,15 +36,19 @@ export function WelfareCard({
             {title}
           </h3>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation(); // 카드 클릭 이벤트 막기
               onBookmark?.();
             }}
             className="p-2 rounded-full hover:bg-opacity-10 transition-all"
-            style={{ backgroundColor: isBookmarked ? colors.pointYellow : colors.lightGray }}
+            style={{
+              backgroundColor: isBookmarked
+                ? colors.pointYellow
+                : colors.lightGray,
+            }}
           >
-            <Bookmark 
-              size={18} 
+            <Bookmark
+              size={18}
               fill={isBookmarked ? colors.textDark : 'none'}
               style={{ color: colors.textDark }}
             />
@@ -65,7 +74,14 @@ export function WelfareCard({
           <Button variant="primary" size="sm" icon={<ExternalLink size={14} />}>
             신청하기
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation(); // 여기서도 카드 onClick 막고
+              onClick?.();        // 상세 페이지 이동 콜백 호출
+            }}
+          >
             자세히 보기
           </Button>
         </div>
