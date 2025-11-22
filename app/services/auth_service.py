@@ -7,7 +7,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -16,19 +16,47 @@ from app.core.config import settings
 from app.models.connection import get_db
 from app.models import models
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """비밀번호 검증"""
-    return pwd_context.verify(plain_password, hashed_password)
+    if isinstance(plain_password, str):
+        plain_password = plain_password.encode('utf-8')
+    if isinstance(hashed_password, str):
+        hashed_password = hashed_password.encode('utf-8')
+    
+    # 72바이트 초과 시 자동으로 잘라냄 (안전장치) - bcrypt 72바이트 제한 호환
+    if len(plain_password) > 72:
+        truncated_bytes = plain_password[:72]
+        while truncated_bytes and truncated_bytes[-1] & 0x80 and not (truncated_bytes[-1] & 0x40):
+            truncated_bytes = truncated_bytes[:-1]
+        plain_password = truncated_bytes
+        
+    return bcrypt.checkpw(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    """비밀번호 해싱"""
-    return pwd_context.hash(password)
+    """
+    비밀번호 해싱
+    - bcrypt는 72바이트로 제한되므로 초과 시 자동으로 잘라냄
+    """
+    password_bytes = password.encode('utf-8')
+    
+    # 72바이트 초과 시 자동으로 잘라냄 (안전장치)
+    if len(password_bytes) > 72:
+        # 72바이트로 자르고 다시 문자열로 변환
+        # UTF-8 인코딩을 고려하여 안전하게 자름
+        truncated_bytes = password_bytes[:72]
+        # 마지막 바이트가 잘린 멀티바이트 문자의 일부일 수 있으므로 처리
+        while truncated_bytes and truncated_bytes[-1] & 0x80 and not (truncated_bytes[-1] & 0x40):
+            truncated_bytes = truncated_bytes[:-1]
+        password_bytes = truncated_bytes
+
+    # 소금(salt) 생성 및 해싱
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

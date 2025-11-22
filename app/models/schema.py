@@ -79,15 +79,21 @@ class VerificationRequest(BaseModel):
 class PostCreate(BaseModel):
     title: str
     content: str
+    category: str  # 'information', 'worry', 'free'
 
 
 class PostResponse(BaseModel):
     id: int
     title: str
     content: str
+    category: str
+    view_count: int = 0
+    like_count: int = 0
     anonymous_id: Optional[str] = None
     created_at: datetime
     comment_count: int = 0
+    is_liked: bool = False  # 현재 사용자가 좋아요를 눌렀는지 여부
+    is_bookmarked: bool = False  # 현재 사용자가 북마크했는지 여부
     
     class Config:
         from_attributes = True
@@ -106,3 +112,66 @@ class CommentResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# Bookmark Schemas
+class BookmarkItem(BaseModel):
+    id: int
+    welfare_id: int
+    welfare: WelfareItem
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class BookmarkListResponse(BaseModel):
+    """북마크 목록 응답"""
+    items: List[BookmarkItem]
+    total: int
+    skip: int
+    limit: int
+
+
+# Chat Room Schemas
+class ChatRoomCreate(BaseModel):
+    title: Optional[str] = None  # 제목이 없으면 첫 메시지로 자동 생성
+
+
+class ChatRoomUpdate(BaseModel):
+    title: str
+
+
+class ChatRoomResponse(BaseModel):
+    id: int
+    title: str
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ChatRoomListResponse(BaseModel):
+    """채팅방 목록 응답"""
+    items: List[ChatRoomResponse]
+    total: int
+
+
+# Post Bookmark Schemas
+class PostBookmarkItem(BaseModel):
+    id: int
+    post_id: int
+    post: PostResponse
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class PostBookmarkListResponse(BaseModel):
+    """게시글 북마크 목록 응답"""
+    items: List[PostBookmarkItem]
+    total: int
+    skip: int
+    limit: int
