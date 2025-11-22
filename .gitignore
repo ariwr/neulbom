@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 venv/
+venv312/
 env/
 ENV/
 .venv
@@ -35,9 +36,18 @@ Thumbs.db
 data/vector_db/
 data/*.pdf
 data/*.hwp
+*.pkl
+*.index
+*.faiss
+*.csv
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Test and development scripts
+test_*.py
+*_test.py
+scripts/test_*.py
 

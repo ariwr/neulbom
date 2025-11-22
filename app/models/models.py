@@ -55,6 +55,9 @@ class Welfare(Base):
     is_always = Column(Boolean, default=False)  # 상시 신청 여부
     status = Column(String, default="active")  # 'active'(진행중), 'closed'(마감), 'expired'(만료)
     
+    # 데이터 분류 (RAG 품질 향상용)
+    category = Column(String, nullable=True, index=True)  # 'SERVICE'(실제 복지), 'NEWS'(뉴스/단순정보), 'UNCERTAIN'(미분류)
+    
     # RAG 관련
     embedding = Column(JSON, nullable=True)  # 벡터 임베딩 (JSON 배열)
     

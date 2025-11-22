@@ -9,31 +9,48 @@ from sqlalchemy.orm import Session
 from app.models import schema
 from app.ai_core.llm_client import llm_client
 from app.ai_core.prompts import CHATBOT_SYSTEM_PROMPT, CBT_PROMPT
-from app.ai_core.safety_guard import detect_crisis, get_crisis_info
+from app.ai_core.safety_guard import detect_crisis, analyze_crisis_level, get_crisis_info
 
 
 def get_chat_response(
     message: str,
     history: Optional[List[Dict]] = None,
     user_id: Optional[int] = None,
-    db: Optional[Session] = None
+    db: Optional[Session] = None,
+    use_llm_detection: bool = True
 ) -> schema.ChatResponse:
     """
     AI 챗봇 응답 생성
     - 공감형 대화 생성
-    - 위기 감지 및 응답
-    - TODO: 대화 내역 DB 저장
+    - 하이브리드 위기 감지 시스템 활용 (Rule-based + LLM)
+    - 위기 수준에 따른 차별화된 응답
+    
+    Args:
+        message: 사용자 메시지
+        history: 대화 히스토리
+        user_id: 사용자 ID
+        db: 데이터베이스 세션
+        use_llm_detection: LLM 기반 위기 감지 사용 여부
     """
     if history is None:
         history = []
     
-    # 위기 감지
-    is_crisis = detect_crisis(message)
+    # 하이브리드 위기 감지 (1차: 키워드, 2차: LLM 감정 분석)
+    crisis_analysis = analyze_crisis_level(message, use_llm=use_llm_detection)
+    is_crisis = crisis_analysis.get("is_crisis", False)
+    crisis_level = crisis_analysis.get("level", "low")
+    detection_method = crisis_analysis.get("detection_method")
     
     if is_crisis:
-        # 위기 상황 응답
-        reply = "지금 많이 힘드시는 것 같아요. 혼자 견디기 어려운 상황이라면 전문가의 도움이 필요할 수 있어요. 주변에 도움을 요청하는 것도 용기 있는 행동이에요."
-        crisis_info = get_crisis_info()
+        # 위기 수준에 따른 차별화된 응답
+        if crisis_level == "high":
+            reply = "지금 정말 힘든 상황이시군요. 혼자 견디기 어려운 상황이라면 즉시 전문가의 도움이 필요해요. 보건복지콜센터(129)로 연락하시거나, 주변에 도움을 요청하는 것도 용기 있는 행동이에요. 당신은 혼자가 아니에요."
+        elif crisis_level == "medium":
+            reply = "지금 많이 힘드시는 것 같아요. 이런 감정을 느끼는 것은 당연해요. 혼자 견디기 어려운 상황이라면 전문가의 도움이 필요할 수 있어요. 주변에 도움을 요청하는 것도 용기 있는 행동이에요."
+        else:
+            reply = "지금 힘든 감정을 느끼고 계시는군요. 그런 감정을 공유해주셔서 감사해요. 더 이야기해보실 수 있을까요?"
+        
+        crisis_info = crisis_analysis.get("info")
     else:
         # 일반 대화 응답
         reply = generate_empathic_response(message, history)
@@ -41,7 +58,7 @@ def get_chat_response(
     
     # TODO: 대화 내역 DB 저장
     # if db and user_id:
-    #     save_chat_log(db, user_id, message, reply, is_crisis)
+    #     save_chat_log(db, user_id, message, reply, is_crisis, crisis_level, detection_method)
     
     return schema.ChatResponse(
         reply=reply,

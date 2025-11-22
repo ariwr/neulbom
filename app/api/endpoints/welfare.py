@@ -8,7 +8,8 @@ from app.models import models, schema
 from app.models.crud import get_welfare_by_id, create_bookmark, get_active_welfares
 from app.services.auth_service import get_optional_user, require_level
 from app.services.welfare_service import search_welfare_with_profile
-from app.services.crawler_service import crawl_and_save_welfares
+# 크롤링 기능은 backup_crawling 폴더로 이동됨
+# from app.services.crawler_service import crawl_and_save_welfares
 
 router = APIRouter(prefix="/api/welfare", tags=["welfare"])
 
@@ -62,35 +63,38 @@ def bookmark_welfare(
     return {"message": "Bookmarked successfully", "bookmark_id": bookmark.id}
 
 
-class CrawlRequest(BaseModel):
-    keywords: Optional[List[str]] = None
-    max_pages: int = 3
-    headless: bool = True  # 헤드리스 모드 사용 여부
-
-
-@router.post("/crawl", response_model=dict)
-def crawl_welfare(
-    crawl_request: CrawlRequest = Body(...),
-    current_user: models.User = Depends(require_level(3)),  # Level 3 (검증회원) 이상 필요
-    db: Session = Depends(get_db)
-):
-    """
-    복지로에서 복지 정보 크롤링 (Selenium 기반)
-    - Level 3 (검증회원) 이상 접근 가능
-    - 관리자용 엔드포인트
-    - Selenium을 사용하여 JavaScript 기반 동적 콘텐츠 크롤링
-    """
-    result = crawl_and_save_welfares(
-        db=db,
-        keywords=crawl_request.keywords,
-        max_pages=crawl_request.max_pages,
-        headless=crawl_request.headless
-    )
-    
-    if not result.get('success'):
-        raise HTTPException(status_code=500, detail=result.get('error_message', '크롤링 실패'))
-    
-    return result
+# 크롤링 기능은 backup_crawling 폴더로 이동됨
+# 필요시 backup_crawling 폴더의 파일을 참고하세요
+#
+# class CrawlRequest(BaseModel):
+#     keywords: Optional[List[str]] = None
+#     max_pages: int = 3
+#     headless: bool = True  # 헤드리스 모드 사용 여부
+#
+#
+# @router.post("/crawl", response_model=dict)
+# def crawl_welfare(
+#     crawl_request: CrawlRequest = Body(...),
+#     current_user: models.User = Depends(require_level(3)),  # Level 3 (검증회원) 이상 필요
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     복지로에서 복지 정보 크롤링 (Selenium 기반)
+#     - Level 3 (검증회원) 이상 접근 가능
+#     - 관리자용 엔드포인트
+#     - Selenium을 사용하여 JavaScript 기반 동적 콘텐츠 크롤링
+#     """
+#     result = crawl_and_save_welfares(
+#         db=db,
+#         keywords=crawl_request.keywords,
+#         max_pages=crawl_request.max_pages,
+#         headless=crawl_request.headless
+#     )
+#     
+#     if not result.get('success'):
+#         raise HTTPException(status_code=500, detail=result.get('error_message', '크롤링 실패'))
+#     
+#     return result
 
 
 @router.get("/active", response_model=List[schema.WelfareItem])

@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.models.connection import init_db
+from app.models.connection import init_db, SessionLocal
 from app.api.endpoints import auth, chat, welfare, community
+from app.ai_core.rag_engine import load_welfares_to_vector_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -22,7 +26,23 @@ app.add_middleware(
 # 데이터베이스 초기화
 @app.on_event("startup")
 async def startup_event():
+    """서버 시작 시 실행되는 초기화 함수"""
+    # 1. 데이터베이스 초기화
     init_db()
+    logger.info("✓ 데이터베이스 초기화 완료")
+    
+    # 2. 벡터 DB 초기화 (DB 데이터를 FAISS 인덱스에 로드)
+    try:
+        db = SessionLocal()
+        try:
+            load_welfares_to_vector_db(db, force_rebuild=False)
+        except Exception as e:
+            logger.error(f"벡터 DB 초기화 실패: {e}")
+            logger.warning("벡터 검색 기능이 제한될 수 있습니다.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"벡터 DB 초기화 중 오류: {e}")
 
 
 # 라우터 등록
