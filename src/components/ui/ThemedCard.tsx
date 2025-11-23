@@ -26,11 +26,11 @@ export function Card({
   const variantStyles = {
     default: {
       backgroundColor: colors.white,
-      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+      boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
     },
     elevated: {
       backgroundColor: colors.white,
-      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+      boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
     },
     outlined: {
       backgroundColor: colors.white,
@@ -40,7 +40,7 @@ export function Card({
 
   return (
     <div
-      className={`rounded-2xl transition-all ${paddingClasses[padding]} ${onClick ? 'cursor-pointer hover:shadow-lg' : ''} ${className}`}
+      className={`rounded-2xl transition-all shadow-soft ${paddingClasses[padding]} ${onClick ? 'cursor-pointer hover:shadow-lg' : ''} ${className}`}
       style={variantStyles[variant]}
       onClick={onClick}
     >

@@ -10,7 +10,6 @@ interface NavbarProps {
 // 홈/마이페이지 제외한 메뉴만 정의
 const navItems = [
   { id: 'chat', label: '챗봇', icon: MessageCircle },
-  { id: 'welfare', label: '복지 검색', icon: Gift },
   { id: 'community', label: '커뮤니티', icon: Users },
 ];
 

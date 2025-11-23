@@ -31,7 +31,7 @@ export function WelfareCard({
     >
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="rounded-full mx-auto mb-4 flex items-center justify-center">
           <h3 className="text-lg flex-1" style={{ color: colors.textDark }}>
             {title}
           </h3>
@@ -43,7 +43,7 @@ export function WelfareCard({
             className="p-2 rounded-full hover:bg-opacity-10 transition-all"
             style={{
               backgroundColor: isBookmarked
-                ? colors.pointYellow
+                ? colors.lightGray
                 : colors.lightGray,
             }}
           >

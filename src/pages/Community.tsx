@@ -37,7 +37,7 @@ export function Community({ posts, onNavigate, onPostClick }: CommunityProps) {
           </h1>
           
           {/* Search */}
-          <Card variant="elevated" padding="sm">
+          <Card variant="elevated" padding="sm" className="rounded-full">
             <div className="flex items-center space-x-3">
               <Search size={20} style={{ color: colors.textSub }} />
               <input
