@@ -1,4 +1,5 @@
 // src/services/postService.ts
+import { apiGet, apiPost, apiPut, apiDelete } from '../config/api';
 
 // 댓글
 export interface Comment {
@@ -10,25 +11,180 @@ export interface Comment {
 // 커뮤니티 카테고리
 export type PostCategory = 'info' | 'counsel' | 'free';
 
+// 백엔드 카테고리 매핑
+const categoryMap: Record<PostCategory, string> = {
+  info: 'information',
+  counsel: 'worry',
+  free: 'free',
+};
+
+const reverseCategoryMap: Record<string, PostCategory> = {
+  information: 'info',
+  worry: 'counsel',
+  free: 'free',
+};
+
 export interface Post {
   id: number;
   title: string;
-  preview: string;
-  // tags: string[];
-  date: string;          // 화면에 보이는 날짜 문자열
+  content: string;
+  preview?: string;
+  date: string;
   commentCount: number;
   hasCrisisFlag?: boolean;
-
-  comments: Comment[];   // 댓글 리스트
-
-  // === 좋아요 / 북마크 / 카테고리 (백엔드 연동용) ===
-  category: PostCategory;   // 'info' | 'counsel' | 'free'
-  likeCount: number;        // 좋아요 수
-  isLiked: boolean;         // 내가 좋아요 눌렀는지
-  isBookmarked: boolean;    // 내가 북마크 했는지
+  comments?: Comment[];
+  category: PostCategory;
+  likeCount: number;
+  isLiked: boolean;
+  isBookmarked: boolean;
+  authorId?: number; // 작성자 ID 추가
 }
 
-// 초기 댓글
+// 백엔드 PostResponse를 프론트엔드 Post로 변환
+function transformPost(backendPost: any): Post {
+  return {
+    id: backendPost.id,
+    title: backendPost.title,
+    content: backendPost.content,
+    preview: backendPost.content.substring(0, 100) + '...',
+    date: new Date(backendPost.created_at).toLocaleDateString('ko-KR'),
+    commentCount: backendPost.comment_count || 0,
+    hasCrisisFlag: false, // 백엔드에서 제공하지 않으면 false
+    category: reverseCategoryMap[backendPost.category] || 'free',
+    likeCount: backendPost.like_count || 0,
+    isLiked: backendPost.is_liked || false,
+    isBookmarked: backendPost.is_bookmarked || false,
+    authorId: backendPost.author_id, // 작성자 ID 매핑 (백엔드가 author_id를 보내준다면)
+  };
+}
+
+// 게시글 목록 가져오기
+export async function fetchPosts(category?: PostCategory, sort: 'latest' | 'popular' = 'latest'): Promise<Post[]> {
+  try {
+    const params = new URLSearchParams();
+    if (category && categoryMap[category]) {
+      params.append('category', categoryMap[category]);
+    }
+    params.append('sort', sort);
+    params.append('limit', '100'); // 충분히 많은 게시글 가져오기
+
+    const endpoint = `/api/community/posts?${params.toString()}`;
+    const backendPosts = await apiGet<any[]>(endpoint);
+    return backendPosts.map(transformPost);
+  } catch (error) {
+    console.error('게시글 목록 조회 실패:', error);
+    throw error;
+  }
+}
+
+// 게시글 상세 조회
+export async function fetchPostDetail(postId: number): Promise<Post> {
+  try {
+    const backendPost = await apiGet<any>(`/api/community/posts/${postId}`);
+    const post = transformPost(backendPost);
+    
+    // 댓글 목록도 함께 가져오기
+    try {
+      const comments = await apiGet<any[]>(`/api/community/posts/${postId}/comments`);
+      post.comments = comments.map(c => ({
+        id: c.id,
+        content: c.content,
+        date: new Date(c.created_at).toLocaleString('ko-KR'),
+      }));
+    } catch (error) {
+      console.error('댓글 조회 실패:', error);
+      post.comments = [];
+    }
+    
+    return post;
+  } catch (error) {
+    console.error('게시글 상세 조회 실패:', error);
+    throw error;
+  }
+}
+
+// 게시글 작성
+export async function createPost(title: string, content: string, category: PostCategory = 'free'): Promise<Post> {
+  try {
+    const backendPost = await apiPost<any>('/api/community/posts', {
+      title,
+      content,
+      category: categoryMap[category],
+    });
+    return transformPost(backendPost);
+  } catch (error) {
+    console.error('게시글 작성 실패:', error);
+    throw error;
+  }
+}
+
+// 게시글 수정
+export async function updatePost(postId: number, title: string, content: string, category: PostCategory = 'free'): Promise<Post> {
+  try {
+    const backendPost = await apiPut<any>(`/api/community/posts/${postId}`, {
+      title,
+      content,
+      category: categoryMap[category],
+    });
+    return transformPost(backendPost);
+  } catch (error) {
+    console.error('게시글 수정 실패:', error);
+    throw error;
+  }
+}
+
+// 게시글 삭제
+export async function deletePost(postId: number): Promise<void> {
+  try {
+    await apiDelete(`/api/community/posts/${postId}`);
+  } catch (error) {
+    console.error('게시글 삭제 실패:', error);
+    throw error;
+  }
+}
+
+// 좋아요 토글
+export async function toggleLike(postId: number): Promise<Post | null> {
+  try {
+    await apiPost(`/api/community/posts/${postId}/like`);
+    // 좋아요 후 게시글 다시 조회
+    return await fetchPostDetail(postId);
+  } catch (error) {
+    console.error('좋아요 토글 실패:', error);
+    throw error;
+  }
+}
+
+// 북마크 토글
+export async function toggleBookmark(postId: number): Promise<Post | null> {
+  try {
+    await apiPost(`/api/community/posts/${postId}/bookmark`);
+    // 북마크 후 게시글 다시 조회
+    return await fetchPostDetail(postId);
+  } catch (error) {
+    console.error('북마크 토글 실패:', error);
+    throw error;
+  }
+}
+
+// 댓글 작성
+export async function createComment(postId: number, content: string): Promise<Comment> {
+  try {
+    const response = await apiPost<any>(`/api/community/posts/${postId}/comments`, {
+      content,
+    });
+    return {
+      id: response.id,
+      content: response.content,
+      date: new Date(response.created_at).toLocaleString('ko-KR'),
+    };
+  } catch (error) {
+    console.error('댓글 작성 실패:', error);
+    throw error;
+  }
+}
+
+// 초기 댓글 (더미 데이터)
 export const initialComments: Comment[] = [
   {
     id: 1,
@@ -46,105 +202,3 @@ export const initialComments: Comment[] = [
     date: '2025.11.21 17:45',
   },
 ];
-
-// 내부에서 관리하는 더미 데이터 (나중에 API 응답으로 대체 예정)
-let postsStore: Post[] = [
-  {
-    id: 1,
-    title: '노인 돌봄 경험 공유합니다',
-    preview:
-      '부모님 돌봄을 시작한 지 3년째입니다. 처음에는 많이 힘들었지만 지금은 여러 복지 서비스를 통해 많은 도움을 받고 있습니다...',
-    // tags: ['노인돌봄', '경험공유'],
-    date: '2025.11.22',
-    commentCount: 15,
-    hasCrisisFlag: false,
-    comments: initialComments,
-    category: 'info',      // 정보공유 느낌
-    likeCount: 32,
-    isLiked: false,
-    isBookmarked: false,
-  },
-  {
-    id: 2,
-    title: '장애인 활동지원 서비스 후기',
-    preview:
-      '활동지원사님이 오시면서 많은 부담이 줄었어요. 같은 상황의 분들께 도움이 되길 바라며 후기 남깁니다...',
-    // tags: ['장애인지원', '후기'],
-    date: '2025.11.21',
-    commentCount: 8,
-    hasCrisisFlag: false,
-    comments: initialComments,
-    category: 'info',      // 정보공유
-    likeCount: 21,
-    isLiked: false,
-    isBookmarked: false,
-  },
-  {
-    id: 3,
-    title: '요즘 너무 힘들어요',
-    preview:
-      '돌봄을 하다 보니 제 시간이 없고, 친구들도 만나지 못하고... 우울한 기분이 계속됩니다...',
-    // tags: ['고민상담'],
-    date: '2025.11.21',
-    commentCount: 23,
-    hasCrisisFlag: true,
-    comments: initialComments,
-    category: 'counsel',   // 고민상담
-    likeCount: 54,
-    isLiked: false,
-    isBookmarked: false,
-  },
-  {
-    id: 4,
-    title: '지역별 돌봄센터 정보 정리',
-    preview:
-      '서울 지역 돌봄센터 정보를 정리해봤습니다. 필요하신 분들께 도움이 되면 좋겠습니다...',
-    // tags: ['정보공유', '서울'],
-    date: '2025.11.20',
-    commentCount: 12,
-    hasCrisisFlag: false,
-    comments: initialComments,
-    category: 'info',      // 정보공유
-    likeCount: 17,
-    isLiked: false,
-    isBookmarked: false,
-  },
-];
-
-// ======================
-// 서비스 함수들
-// ======================
-
-// 게시글 목록 가져오기
-export async function fetchPosts(): Promise<Post[]> {
-  // 나중에: const res = await axios.get('/api/posts'); return res.data;
-  return Promise.resolve(postsStore);
-}
-
-// 좋아요 토글
-export async function toggleLike(postId: number): Promise<Post | null> {
-  // 나중에: const res = await axios.post(`/api/posts/${postId}/like`); return res.data;
-
-  postsStore = postsStore.map((p) =>
-    p.id === postId
-      ? {
-          ...p,
-          isLiked: !p.isLiked,
-          likeCount: p.isLiked ? p.likeCount - 1 : p.likeCount + 1,
-        }
-      : p,
-  );
-  const updated = postsStore.find((p) => p.id === postId) ?? null;
-  return Promise.resolve(updated);
-}
-
-// 북마크 토글
-export async function toggleBookmark(postId: number): Promise<Post | null> {
-  // 나중에: const res = await axios.post(`/api/posts/${postId}/bookmark`); return res.data;
-
-  postsStore = postsStore.map((p) =>
-    p.id === postId ? { ...p, isBookmarked: !p.isBookmarked } : p,
-  );
-  const updated = postsStore.find((p) => p.id === postId) ?? null;
-  return Promise.resolve(updated);
-}

@@ -36,7 +36,7 @@ export function Community({
     { id: 'all' as CategoryId, label: '전체' },
     { id: 'info' as CategoryId, label: '정보공유' },
     { id: 'counsel' as CategoryId, label: '고민상담' },
-    { id: 'free' as CategoryId, label: '자유게시판' },
+    { id: 'free' as CategoryId, label: '자유' },
   ];
 
   // 카테고리 + 정렬 적용된 게시글 리스트
@@ -184,7 +184,7 @@ export function Community({
                   : post.category === 'counsel'
                   ? '고민상담'
                   : post.category === 'free'
-                  ? '자유게시판'
+                  ? '자유'
                   : '전체'
               }
               onToggleLike={() => onToggleLike?.(post.id)}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, AlertTriangle, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, AlertTriangle, MessageCircle, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { Card } from '../components/ui/ThemedCard';
 import { Button } from '../components/ui/ThemedButton';
 import { Badge } from '../components/ui/Badge';
@@ -7,6 +7,7 @@ import { TextArea } from '../components/ui/ThemedTextArea';
 import { colors } from '../styles/design-tokens';
 import type { Post } from '../services/postService'
 import type { Page } from '../types/page';
+import { getProfile } from '../services/authService';
 
 interface PostDetailProps {
   post: Post | null;
@@ -18,6 +19,18 @@ interface PostDetailProps {
 
 export function PostDetail({ post, onNavigate, onAddComment, onToggleLike, onToggleBookmark }: PostDetailProps) {
   const [comment, setComment] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
+
+  useEffect(() => {
+    getProfile().then(user => {
+      setCurrentUserId(user.id);
+    }).catch(() => {
+      // 로그인하지 않은 경우 무시
+    });
+  }, []);
+
+  const isMine = post?.authorId === currentUserId;
 
   // post가 없을 시
   if (!post) {
@@ -214,12 +227,7 @@ export function PostDetail({ post, onNavigate, onAddComment, onToggleLike, onTog
                   style={{ backgroundColor: colors.lightGray }}
                 >
                   <div className="flex items-start space-x-3">
-                    <div 
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: colors.white }}
-                    >
-                      <span className="text-xs" style={{ color: colors.textSub }}>익명</span>
-                    </div>
+                    {/* 익명 이름 표시 제거 */}
                     <div className="flex-1">
                       <p className="text-sm mb-2" style={{ color: colors.textDark }}>
                         {comment.content}

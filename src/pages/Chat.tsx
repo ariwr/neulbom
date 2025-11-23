@@ -16,6 +16,7 @@ import {
   createConversation,
   type ChatConversation,
   type ChatMessage,
+  type ChatResponse,
 } from '../services/chatService';
 
 export function Chat() {
@@ -26,14 +27,19 @@ export function Chat() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [messages, setMessagesState] = useState<ChatMessage[]>([]); // 현재 active 대화의 메시지들
 
-  // ---- 1) 초기 대화 목록 로딩 ----
+  // ---- 1) 초기 대화 목록 로딩 (로그인한 사용자만) ----
   useEffect(() => {
-    fetchConversations().then((data) => {
-      setConversations(data);
-      if (data.length && activeConversationId === null) {
-        setActiveConversationId(data[0].id);
-      }
-    });
+    fetchConversations()
+      .then((data) => {
+        setConversations(data);
+        if (data.length && activeConversationId === null) {
+          setActiveConversationId(data[0].id);
+        }
+      })
+      .catch((error) => {
+        // 에러는 조용히 처리 (로그인하지 않은 사용자는 빈 배열 반환)
+        console.log('채팅방 목록을 불러올 수 없습니다 (로그인 필요):', error);
+      });
   }, []);
 
   // ---- 2) activeConversationId 변경될 때마다 메시지 로딩 ----
@@ -49,10 +55,20 @@ export function Chat() {
 
   // 새 대화 만들기
   const handleNewConversation = async () => {
-    const newConv = await createConversation();
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConversationId(newConv.id);
-    setMessagesState([]); // 새 대화라 메시지 없음
+    try {
+      const newConv = await createConversation();
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newConv.id);
+      setMessagesState([]); // 새 대화라 메시지 없음
+    } catch (error: any) {
+      // 로그인이 필요한 경우 알림 표시
+      if (error?.message?.includes('로그인')) {
+        alert('채팅방을 만들려면 로그인이 필요합니다.');
+      } else {
+        console.error('채팅방 생성 실패:', error);
+        alert('채팅방 생성에 실패했습니다.');
+      }
+    }
   };
 
   // ---- 4) 제목 수정 ----
@@ -62,12 +78,21 @@ export function Chat() {
     const newTitle = window.prompt('대화 제목을 수정하세요', current?.title ?? '');
     if (!newTitle || !newTitle.trim()) return;
 
-    await renameConversation(activeConversationId, newTitle.trim());
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeConversationId ? { ...c, title: newTitle.trim() } : c,
-      ),
-    );
+    try {
+      await renameConversation(activeConversationId, newTitle.trim());
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversationId ? { ...c, title: newTitle.trim() } : c,
+        ),
+      );
+    } catch (error: any) {
+      if (error?.message?.includes('로그인')) {
+        alert('제목을 수정하려면 로그인이 필요합니다.');
+      } else {
+        console.error('제목 수정 실패:', error);
+        alert('제목 수정에 실패했습니다.');
+      }
+    }
   };
 
   // ---- 5) 대화 삭제 ----
@@ -76,29 +101,77 @@ export function Chat() {
     const ok = window.confirm('이 대화를 삭제하시겠습니까?');
     if (!ok) return;
 
-    await deleteConversation(activeConversationId);
-    setConversations((prev) => prev.filter((c) => c.id !== activeConversationId));
+    try {
+      await deleteConversation(activeConversationId);
+      setConversations((prev) => prev.filter((c) => c.id !== activeConversationId));
 
-    // 남은 대화 중 첫 번째로 이동, 없으면 null
-    setMessagesState([]);
-    setActiveConversationId((prevId) => {
-      const rest = conversations.filter((c) => c.id !== prevId);
-      return rest.length ? rest[0].id : null;
-    });
+      // 남은 대화 중 첫 번째로 이동, 없으면 null
+      setMessagesState([]);
+      setActiveConversationId((prevId) => {
+        const rest = conversations.filter((c) => c.id !== prevId);
+        return rest.length ? rest[0].id : null;
+      });
+    } catch (error: any) {
+      if (error?.message?.includes('로그인')) {
+        alert('대화를 삭제하려면 로그인이 필요합니다.');
+      } else {
+        console.error('대화 삭제 실패:', error);
+        alert('대화 삭제에 실패했습니다.');
+      }
+    }
   };
 
-  // ---- 6) 메시지 전송 ----
+  // ---- 6) 메시지 전송 (비회원도 가능) ----
   const handleSend = async () => {
-    if (!message.trim() || activeConversationId == null) return;
+    if (!message.trim()) return;
 
     const text = message.trim();
     setMessage('');
 
-    const newMsgs = await sendMessage(activeConversationId, text);
-    setMessagesState((prev) => [...prev, ...newMsgs]);
-
-    // TODO: 위기 탐지 로직은 나중에 AI 응답 기반으로 설정
-    // setShowCrisisPanel(위기감지여부);
+    try {
+      // activeConversationId가 null이면 비회원 채팅 (room_id 없이 전송)
+      const response = await sendMessage(activeConversationId, text, messages);
+      
+      // 사용자 메시지 추가
+      const userMsg: ChatMessage = {
+        conversationId: activeConversationId || 0,
+        content: text,
+        isUser: true,
+        timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      };
+      
+      // 봇 응답 추가
+      const botMsg: ChatMessage = {
+        conversationId: activeConversationId || 0,
+        content: response.reply,
+        isUser: false,
+        timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      };
+      
+      setMessagesState((prev) => [...prev, userMsg, botMsg]);
+      
+      // 위기 감지 처리
+      if (response.is_crisis) {
+        setShowCrisisPanel(true);
+      }
+      
+      // room_id가 반환되면 저장 (새 채팅방 생성된 경우)
+      if (response.room_id && activeConversationId === null) {
+        setActiveConversationId(response.room_id);
+        // 채팅방 목록 새로고침 (로그인한 경우)
+        fetchConversations()
+          .then((data) => {
+            setConversations(data);
+          })
+          .catch(() => {
+            // 에러는 무시 (비회원인 경우)
+          });
+      }
+    } catch (error) {
+      console.error('메시지 전송 실패:', error);
+      alert('메시지 전송에 실패했습니다. 다시 시도해주세요.');
+      setMessage(text); // 실패한 메시지 복원
+    }
   };
 
   const activeConversation = conversations.find(
@@ -138,7 +211,7 @@ export function Chat() {
                 {conv.title}
               </p>
               <p className="text-xs" style={{ color: colors.textSub }}>
-                {conv.createdAt}
+                {conv.created_at ? new Date(conv.created_at).toLocaleDateString('ko-KR') : ''}
               </p>
             </div>
           ))}
@@ -231,7 +304,13 @@ export function Chat() {
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="메시지를 입력하세요..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="메시지를 입력하세요... (Enter로 전송, Shift+Enter로 줄바꿈)"
                 rows={3}
                 className="w-full px-4 py-3 rounded-2xl outline-none border-2 resize-none"
                 style={{

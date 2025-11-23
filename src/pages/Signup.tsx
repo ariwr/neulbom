@@ -4,14 +4,16 @@ import { Button } from '../components/ui/ThemedButton';
 import { Card } from '../components/ui/ThemedCard';
 import { Badge } from '../components/ui/Badge';
 import { colors } from '../styles/design-tokens';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import type { Page } from '../types/page';
+import { signup } from '../services/authService';
 
 interface SignupProps {
   onNavigate: (page: Page) => void;
+  onSignupSuccess?: () => void;
 }
 
-export function Signup({ onNavigate }: SignupProps) {
+export function Signup({ onNavigate, onSignupSuccess }: SignupProps) {
   const [formData, setFormData] = useState({
     name: '',
     age: '',
@@ -21,6 +23,10 @@ export function Signup({ onNavigate }: SignupProps) {
     password: '',
     confirmPassword: '',
   });
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   return (
     <div 
@@ -112,17 +118,87 @@ export function Signup({ onNavigate }: SignupProps) {
               fullWidth
             />
 
+            {/* 에러 메시지 */}
+            {error && (
+              <div className="flex items-center space-x-2 p-3 rounded-md" style={{ backgroundColor: colors.error + '10', borderLeft: `4px solid ${colors.error}` }}>
+                <AlertCircle size={16} style={{ color: colors.error }} />
+                <span className="text-sm" style={{ color: colors.error }}>{error}</span>
+              </div>
+            )}
+
+            {/* 성공 메시지 */}
+            {success && (
+              <div className="flex items-center space-x-2 p-3 rounded-md" style={{ backgroundColor: '#10b981' + '10', borderLeft: '4px solid #10b981' }}>
+                <CheckCircle size={16} style={{ color: '#10b981' }} />
+                <span className="text-sm" style={{ color: '#10b981' }}>회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.</span>
+              </div>
+            )}
+
             <div className="pt-4">
               <Button
                 variant="primary"
                 size="lg"
                 fullWidth
-                onClick={() => {
-                  // 나중에 여기서 실제 회원가입 API 호출(onSignup(formData)) 들어갈 자리
-                  onNavigate('login');      // 회원가입 후 로그인 페이지로 이동
+                disabled={isLoading || success}
+                onClick={async () => {
+                  // 유효성 검사
+                  if (!formData.name.trim()) {
+                    setError('이름을 입력해주세요.');
+                    return;
+                  }
+                  if (!formData.email.trim()) {
+                    setError('이메일을 입력해주세요.');
+                    return;
+                  }
+                  if (!formData.password.trim()) {
+                    setError('비밀번호를 입력해주세요.');
+                    return;
+                  }
+                  if (formData.password.length < 8) {
+                    setError('비밀번호는 8자 이상이어야 합니다.');
+                    return;
+                  }
+                  if (formData.password !== formData.confirmPassword) {
+                    setError('비밀번호가 일치하지 않습니다.');
+                    return;
+                  }
+
+                  setIsLoading(true);
+                  setError(null);
+                  setSuccess(false);
+
+                  try {
+                    // 회원가입 API 호출
+                    await signup({
+                      name: formData.name.trim(),
+                      email: formData.email.trim(),
+                      password: formData.password,
+                      password_confirm: formData.confirmPassword,
+                      age: formData.age ? parseInt(formData.age) : undefined,
+                      region: formData.region.trim() || undefined,
+                      care_target: formData.careTarget.trim() || undefined,
+                    });
+
+                    // 성공 메시지 표시
+                    setSuccess(true);
+                    
+                    // 회원가입 성공 시 로그인 상태 업데이트
+                    onSignupSuccess?.();
+                    
+                    // 2초 후 로그인 페이지로 이동
+                    setTimeout(() => {
+                      onNavigate('login');
+                    }, 2000);
+                  } catch (err: any) {
+                    // 에러 메시지 표시
+                    const errorMessage = err?.message || '회원가입에 실패했습니다. 다시 시도해주세요.';
+                    setError(errorMessage);
+                  } finally {
+                    setIsLoading(false);
+                  }
                 }}
                 >
-                가입하기
+                {isLoading ? '가입 중...' : success ? '가입 완료!' : '가입하기'}
               </Button>
             </div>
           </div>

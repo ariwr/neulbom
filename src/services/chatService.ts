@@ -1,94 +1,111 @@
 // services/chatService.ts
+import { apiGet, apiPost, apiPut, apiDelete } from '../config/api';
+
 export interface ChatConversation {
   id: number;
   title: string;
-  createdAt: string;        // ISO 문자열
-  // lastMessageAt?: string;
+  created_at: string;
 }
 
 export interface ChatMessage {
-  id: number;
+  id?: number;
   conversationId: number;
   content: string;
   isUser: boolean;
   timestamp: string;
 }
 
-// ---- 더미 데이터 (나중에 API 응답으로 교체) ----
-const MOCK_CONVERSATIONS: ChatConversation[] = [
-  { id: 1, title: '복지 서비스 문의', createdAt: '2025.11.20' },
-  { id: 2, title: '돌봄 스트레스 상담', createdAt: '2025.11.19' },
-  { id: 3, title: '지역 자원 안내',   createdAt: '2025.11.18' },
-];
+export interface ChatResponse {
+  reply: string;
+  is_crisis: boolean;
+  crisis_info?: {
+    phone?: string;
+    message?: string;
+  };
+  room_id?: number;
+}
 
-const MOCK_MESSAGES: ChatMessage[] = [
-  { id: 1, conversationId: 1, content: '안녕하세요! 오늘은 어떤 도움이 필요하신가요?', isUser: false, timestamp: '14:30' },
-  { id: 2, conversationId: 1, content: '요즘 부모님 돌봄이 너무 힘들어요. 어떤 지원을 받을 수 있을까요?', isUser: true, timestamp: '14:32' },
-  { id: 3, conversationId: 1, content: '거주 지역과 부모님 연령대를 알려주시면 맞춤 복지 서비스를 안내해드릴게요.', isUser: false, timestamp: '14:33' },
-  { id: 4, conversationId: 1, content: '서울 강남구이고, 어머니는 75세이십니다', isUser: true, timestamp: '14:35' },
-];
-
-// 실제로는 API 호출 자리가 될 함수들
+// 채팅방 목록 가져오기 (로그인한 사용자만 가능)
 export async function fetchConversations(): Promise<ChatConversation[]> {
-  // return fetch('/api/conversations').then(r => r.json());
-  return Promise.resolve(MOCK_CONVERSATIONS);
+  try {
+    const response = await apiGet<{ items: ChatConversation[]; total: number }>('/api/chat/rooms');
+    return response.items || [];
+  } catch (error: any) {
+    // 인증 오류(401) 또는 권한 없음(403)인 경우 빈 배열 반환 (조용히 처리)
+    if (error?.status === 401 || error?.status === 403) {
+      return [];
+    }
+    // 다른 오류는 콘솔에만 기록하고 빈 배열 반환
+    console.error('채팅방 목록 조회 실패:', error);
+    return [];
+  }
 }
 
-export async function fetchMessages(conversationId: number): Promise<ChatMessage[]> {
-  // return fetch(`/api/conversations/${conversationId}/messages`).then(r => r.json());
-  return Promise.resolve(
-    MOCK_MESSAGES.filter((m) => m.conversationId === conversationId),
-  );
-}
-
+// 채팅방 생성 (로그인한 사용자만 가능)
 export async function createConversation(title?: string): Promise<ChatConversation> {
-  const now = new Date();
-  const newConv: ChatConversation = {
-    id: Date.now(), // 나중에 백엔드가 id 생성
-    title: title || '새 대화',
-    createdAt: now.toISOString(),
-  };
-
-  MOCK_CONVERSATIONS.unshift(newConv); // 맨 위에 추가
-  return Promise.resolve(newConv);
+  try {
+    const response = await apiPost<ChatConversation>('/api/chat/rooms', {
+      title: title || '새 대화',
+    });
+    return response;
+  } catch (error: any) {
+    // 인증 오류인 경우 에러를 다시 throw하여 호출자가 처리할 수 있도록 함
+    if (error?.status === 401 || error?.status === 403) {
+      throw new Error('로그인이 필요합니다.');
+    }
+    throw error;
+  }
 }
 
+// 채팅방 제목 수정 (로그인한 사용자만 가능)
 export async function renameConversation(id: number, title: string): Promise<void> {
-  // await fetch(`/api/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) });
-  const target = MOCK_CONVERSATIONS.find((c) => c.id === id);
-  if (target) target.title = title;
+  try {
+    await apiPut(`/api/chat/rooms/${id}`, { title });
+  } catch (error: any) {
+    if (error?.status === 401 || error?.status === 403) {
+      throw new Error('로그인이 필요합니다.');
+    }
+    throw error;
+  }
 }
 
+// 채팅방 삭제 (로그인한 사용자만 가능)
 export async function deleteConversation(id: number): Promise<void> {
-  // await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
-  const idx = MOCK_CONVERSATIONS.findIndex((c) => c.id === id);
-  if (idx >= 0) MOCK_CONVERSATIONS.splice(idx, 1);
+  try {
+    await apiDelete(`/api/chat/rooms/${id}`);
+  } catch (error: any) {
+    if (error?.status === 401 || error?.status === 403) {
+      throw new Error('로그인이 필요합니다.');
+    }
+    throw error;
+  }
 }
 
+// 메시지 전송 (실제로는 메시지 히스토리를 직접 가져올 수 없으므로, 전송만 처리)
 export async function sendMessage(
-  conversationId: number,
+  conversationId: number | null,
   text: string,
-): Promise<ChatMessage[]> {
-  // 1) 여기에서 백엔드에 user 메시지 보내고
-  // 2) 백엔드가 만든 assistant 응답 함께 받아서 리턴하는 구조로 설계하면 좋음
-  // const res = await fetch(`/api/conversations/${conversationId}/messages`, { ... });
+  history: ChatMessage[] = []
+): Promise<ChatResponse> {
+  // 히스토리를 백엔드 형식으로 변환
+  const formattedHistory = history.map(msg => ({
+    role: msg.isUser ? 'user' : 'assistant',
+    content: msg.content,
+  }));
 
-  const userMsg: ChatMessage = {
-    id: Date.now(),
-    conversationId,
-    content: text,
-    isUser: true,
-    timestamp: '15:00',
-  };
+  const params = conversationId ? `?room_id=${conversationId}` : '';
+  const response = await apiPost<ChatResponse>(`/api/chat/message${params}`, {
+    message: text,
+    history: formattedHistory,
+  });
 
-  const botMsg: ChatMessage = {
-    id: Date.now() + 1,
-    conversationId,
-    content: '테스트 응답입니다 (나중에 AI 응답으로 교체)',
-    isUser: false,
-    timestamp: '15:00',
-  };
+  return response;
+}
 
-  MOCK_MESSAGES.push(userMsg, botMsg);
-  return Promise.resolve([userMsg, botMsg]);
+// 메시지 목록 가져오기 (백엔드에 해당 API가 없으므로 빈 배열 반환)
+// 실제 구현을 위해서는 백엔드에 메시지 히스토리 조회 API가 필요합니다
+export async function fetchMessages(conversationId: number): Promise<ChatMessage[]> {
+  // TODO: 백엔드에 메시지 히스토리 조회 API 추가 필요
+  // 현재는 빈 배열 반환
+  return Promise.resolve([]);
 }

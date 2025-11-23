@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Bookmark, ExternalLink } from 'lucide-react';
 import { Card } from './ui/ThemedCard';
 import { Badge } from './ui/Badge';
@@ -15,7 +15,7 @@ interface WelfareCardProps {
   onClick?: () => void;
 }
 
-export function WelfareCard({
+export const WelfareCard = memo(function WelfareCard({
   title,
   summary,
   eligibility,
@@ -88,4 +88,4 @@ export function WelfareCard({
       </div>
     </Card>
   );
-}
+});

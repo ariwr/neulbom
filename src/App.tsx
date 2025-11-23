@@ -1,5 +1,5 @@
 // App.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -13,41 +13,104 @@ import { PostSubmit } from './pages/PostSubmit';
 import { MyPage } from './pages/MyPage';
 import { AdminVerification } from './pages/AdminVerification';
 import type { Page } from './types/page'
+import { getAuthToken, setAuthToken } from './config/api';
+import { logout as authLogout } from './services/authService';
 
 import {
   fetchPosts,
+  createPost, // createPost import 추가
   toggleBookmark,
   toggleLike,
-  initialComments,
   type Post,
 } from './services/postService';
 
-import {
-  initialWelfares,
-  type Welfare as WelfareType,
-} from './services/welfareService';
+import type { Welfare as WelfareType } from './services/welfareService';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    // 초기 로그인 상태 확인
+    return !!getAuthToken();
+  });
 
-  // setState를 한번 감싼 핸들러
-  const handleNavigate = (page: Page) => {
+  // setState를 한번 감싼 핸들러 (메모이제이션)
+  const handleNavigate = useCallback((page: Page) => {
+    // 커뮤니티 관련 페이지는 로그인 필수
+    const communityPages: Page[] = ['community', 'post-detail', 'post-submit'];
+    if (communityPages.includes(page)) {
+      if (!isLoggedIn) {
+        alert('커뮤니티를 이용하려면 로그인이 필요합니다.');
+        // 로그인 페이지로 이동하지 않고 현재 페이지 유지
+        return;
+      }
+    }
     setCurrentPage(page);
-  }
+  }, [isLoggedIn]);
+
+  // 로그인 상태 업데이트 함수 (메모이제이션)
+  const updateLoginStatus = useCallback((token?: string) => {
+    // 인자로 토큰이 전달되면 즉시 사용, 아니면 localStorage 확인
+    const currentToken = token || getAuthToken();
+    
+    // 개발 모드에서만 로깅
+    if (import.meta.env.DEV) {
+      console.log('로그인 상태 업데이트:', currentToken ? '로그인됨' : '로그인 안됨', token ? '(토큰 전달됨)' : '(localStorage에서 읽음)');
+    }
+    
+    // 토큰이 전달된 경우 localStorage에도 저장 (이중 안전장치)
+    if (token) {
+      setAuthToken(token);
+      if (import.meta.env.DEV) {
+        console.log('토큰을 localStorage에 저장 완료');
+      }
+    }
+    
+    setIsLoggedIn(!!currentToken);
+  }, []);
+
+  // 로그아웃 핸들러 (메모이제이션)
+  const handleLogout = useCallback(() => {
+    authLogout();
+    setIsLoggedIn(false);
+    setCurrentPage('home');
+  }, []);
 
   // 커뮤니티 상태
   const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
 
-   // 앱 시작 시 게시글 불러오기 (나중에 API로 교체)
+   // 앱 시작 시 게시글 불러오기 (로그인된 경우에만)
   useEffect(() => {
-    fetchPosts().then((data) => {
-      setPosts(data);
-    });
-  }, []);
-
-  // 복지 목록 (나중에 여기를 API fetch 결과로 교체)
-  const [welfares] = useState<WelfareType[]>(initialWelfares);
+    // 토큰을 직접 확인하여 더 확실하게 검증
+    const token = getAuthToken();
+    if (isLoggedIn && token) {
+      // 약간의 지연을 주어 상태 업데이트가 완료되도록 함
+      const timer = setTimeout(() => {
+        fetchPosts()
+          .then((data) => {
+            setPosts(data);
+          })
+          .catch((error: any) => {
+            // 개발 모드에서만 로깅
+            if (import.meta.env.DEV) {
+              console.error('게시글 불러오기 실패:', error);
+            }
+            // 401 에러인 경우 로그인 상태를 false로 변경
+            if (error.status === 401) {
+              if (import.meta.env.DEV) {
+                console.warn('인증 실패, 로그인 상태를 false로 변경');
+              }
+              setIsLoggedIn(false);
+            }
+          });
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    } else {
+      // 로그인하지 않은 경우 빈 배열로 설정
+      setPosts([]);
+    }
+  }, [isLoggedIn]);
 
   // 어떤 복지를 선택했는지 (상세 페이지용)
   const [selectedWelfareId, setSelectedWelfareId] = useState<number | null>(null);
@@ -55,15 +118,15 @@ export default function App() {
   // 어떤 것들이 북마크 됐는지 id 배열로 관리
   const [bookmarkedWelfareIds, setBookmarkedWelfareIds] = useState<number[]>([]);
 
-  // 북마크 게시글 관리
-  const bookmarkedPosts = posts.filter((p) => p.isBookmarked);
+  // 북마크 게시글 관리 (메모이제이션)
+  const bookmarkedPosts = useMemo(() => posts.filter((p) => p.isBookmarked), [posts]);
 
-  // 북마크 토글 핸들러
-  const toggleWelfareBookmark = (id: number) => {
+  // 북마크 토글 핸들러 (메모이제이션)
+  const toggleWelfareBookmark = useCallback((id: number) => {
     setBookmarkedWelfareIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
-  };
+  }, []);
 
   // 게시글 좋아요 토글 (서비스 + 상태 반영)
   const handleTogglePostLike = async (postId: number) => {
@@ -85,37 +148,41 @@ export default function App() {
     );
   };
 
-  // 마이페이지에 넘길 북마크된 복지 목록
-  const bookmarkedWelfares = welfares.filter((w) =>
-    bookmarkedWelfareIds.includes(w.id),
-  );
+  // 마이페이지에 넘길 북마크된 복지 목록 (빈 배열로 초기화, 나중에 API로 가져올 수 있음)
+  const bookmarkedWelfares: WelfareType[] = [];
 
   // PostSubmit에서 사용
-  const addPost = (data: { title: string; preview: string }) => {
-    const nextId = posts.length ? posts[posts.length - 1].id + 1 : 1;
+  const addPost = async (data: { title: string; preview: string; category: 'info' | 'counsel' | 'free' }) => {
+    try {
+      // 로그인 확인 (isLoggedIn state 사용)
+      if (!isLoggedIn) {
+        alert('게시글을 작성하려면 로그인이 필요합니다.');
+        handleNavigate('login');
+        return;
+      }
 
-    const today = new Date();
-    const dateString = `${today.getFullYear()}.${String(
-      today.getMonth() + 1,
-    ).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
-
-    const newPost: Post = {
-      id: nextId,
-      title: data.title,
-      preview: data.preview,
-      date: dateString,
-      commentCount: 0,
-      comments: initialComments,
-
-      // ✅ 새로 추가된 필드들 (postService의 Post 타입과 맞춰야 함)
-      hasCrisisFlag: false,
-      category: 'free',       // 기본값: 자유게시판 (UI에서 선택하게 바꿔도 됨)
-      likeCount: 0,
-      isLiked: false,
-      isBookmarked: false,
-    };
-
-    setPosts((prev) => [newPost, ...prev]);
+      // API 호출로 게시글 생성
+      const newPost = await createPost(data.title, data.preview, data.category);
+      // 상태 업데이트 (최신글이 위로 오도록)
+      setPosts((prev) => [newPost, ...prev]);
+    } catch (error: any) {
+      // 개발 모드에서만 로깅
+      if (import.meta.env.DEV) {
+        console.error('게시글 생성 실패:', error);
+      }
+      
+      // 401 Unauthorized 에러 처리
+      if (error.status === 401) {
+        alert('로그인이 필요합니다. 로그인 페이지로 이동합니다.');
+        setIsLoggedIn(false);
+        handleNavigate('login');
+        return;
+      }
+      
+      // 기타 에러 처리
+      const errorMessage = error.message || '게시글 작성에 실패했습니다.';
+      alert(errorMessage);
+    }
   };
 
   const addComment = (postId: number, content: string) => {
@@ -135,27 +202,33 @@ export default function App() {
     );
   };
 
-  // 복지 카드 클릭 시: id 저장 + 상세 페이지로 이동
-  const handleSelectWelfare = (id: number) => {
+  // 복지 카드 클릭 시: id 저장 + 상세 페이지로 이동 (메모이제이션)
+  const handleSelectWelfare = useCallback((id: number) => {
     setSelectedWelfareId(id);
     handleNavigate('welfare-detail');
-  };
+  }, []);
 
   const renderPage = () => {
     switch (currentPage) {
       case 'login':
-        return <Login onNavigate={handleNavigate} />;
+        return <Login onNavigate={handleNavigate} onLoginSuccess={updateLoginStatus} />;
 
       case 'signup':
-        return <Signup onNavigate={handleNavigate} />;
+        return <Signup onNavigate={handleNavigate} onSignupSuccess={updateLoginStatus} />;
 
       case 'home':
         return (
           <>
-            <Navbar activePage="home" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="home" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <Home
               onNavigate={handleNavigate}
-              welfares={welfares}
               bookmarkedIds={bookmarkedWelfareIds}
               onToggleBookmark={toggleWelfareBookmark}
               // ⭐ 상세 이동용 콜백 추가
@@ -167,7 +240,14 @@ export default function App() {
       case 'chat':
         return (
           <>
-            <Navbar activePage="chat" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="chat" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <Chat />
           </>
         );
@@ -175,10 +255,15 @@ export default function App() {
       case 'welfare':
         return (
           <>
-            <Navbar activePage="welfare" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="welfare" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+            />
             <Welfare
               onNavigate={handleNavigate}
-              welfares={welfares}
               bookmarkedIds={bookmarkedWelfareIds}
               onToggleBookmark={toggleWelfareBookmark}
               // ⭐ 목록 화면에서도 상세 이동 콜백
@@ -188,16 +273,18 @@ export default function App() {
         );
 
       case 'welfare-detail': {
-        // 선택된 복지 데이터 찾기
-        const selectedWelfare = welfares.find(
-          (w) => w.id === selectedWelfareId,
-        ) || null;
-
-        if (!selectedWelfare) {
-          // 새로고침 등으로 id가 없는 경우 안전 처리
+        // 선택된 복지 ID가 없으면 복지 목록으로 리다이렉트
+        if (!selectedWelfareId) {
           return (
             <>
-              <Navbar activePage="welfare" onNavigate={handleNavigate} />
+              <Navbar 
+              activePage="welfare" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
               <div className="max-w-4xl mx-auto p-4">
                 <p>선택된 복지 정보가 없습니다.</p>
                 <button
@@ -211,18 +298,25 @@ export default function App() {
           );
         }
 
-        const isBookmarked = bookmarkedWelfareIds.includes(selectedWelfare.id);
+        const isBookmarked = bookmarkedWelfareIds.includes(selectedWelfareId);
 
         return (
           <>
-            <Navbar activePage="welfare" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="welfare" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <WelfareDetail
               onNavigate={handleNavigate}
-              // data={selectedWelfare}              // ✅ 실제 선택된 데이터 전달
-              isBookmarked={isBookmarked}         // ✅ 현재 북마크 여부
+              welfareId={selectedWelfareId}
+              isBookmarked={isBookmarked}
               onToggleBookmark={() =>
-                toggleWelfareBookmark(selectedWelfare.id)
-              }                                   // ✅ 이 복지에 대한 북마크 토글
+                toggleWelfareBookmark(selectedWelfareId)
+              }
             />
           </>
         );
@@ -231,7 +325,14 @@ export default function App() {
       case 'community':
         return (
           <>
-            <Navbar activePage="community" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="community" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <Community
               posts={posts}
               onToggleBookmark={handleTogglePostBookmark}
@@ -249,7 +350,14 @@ export default function App() {
         const post = posts.find((p) => p.id === selectedPostId) || null;
         return (
           <>
-            <Navbar activePage="community" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="community" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <PostDetail
               onNavigate={handleNavigate}
               post={post}
@@ -264,13 +372,21 @@ export default function App() {
       case 'post-submit':
         return (
           <>
-            <Navbar activePage="community" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="community" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <PostSubmit
               onNavigate={handleNavigate}
               onSubmit={(data) => {
                 addPost(data);
                 handleNavigate('community');
               }}
+              isLoggedIn={isLoggedIn}
             />
           </>
         );
@@ -278,7 +394,14 @@ export default function App() {
       case 'mypage':
         return (
           <>
-            <Navbar activePage="mypage" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="mypage" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <MyPage
               onNavigate={handleNavigate}
               bookmarkedWelfares={bookmarkedWelfares}
@@ -295,7 +418,14 @@ export default function App() {
       case 'admin':
         return (
           <>
-            <Navbar activePage="home" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="home" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <AdminVerification />
           </>
         );
@@ -303,10 +433,16 @@ export default function App() {
       default:
         return (
           <>
-            <Navbar activePage="home" onNavigate={handleNavigate} />
+            <Navbar 
+              activePage="home" 
+              onNavigate={handleNavigate}
+              isLoggedIn={isLoggedIn}
+              onLoginClick={() => handleNavigate('login')}
+              onLogoutClick={handleLogout}
+              onCommunityClick={handleNavigate}
+            />
             <Home
               onNavigate={handleNavigate}
-              welfares={welfares}
               bookmarkedIds={bookmarkedWelfareIds}
               onToggleBookmark={toggleWelfareBookmark}
               onSelectWelfare={handleSelectWelfare}
