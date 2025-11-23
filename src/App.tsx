@@ -1,5 +1,5 @@
 // App.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -15,8 +15,10 @@ import { AdminVerification } from './pages/AdminVerification';
 import type { Page } from './types/page'
 
 import {
+  fetchPosts,
+  toggleBookmark,
+  toggleLike,
   initialComments,
-  initialPosts,
   type Post,
 } from './services/postService';
 
@@ -34,8 +36,15 @@ export default function App() {
   }
 
   // 커뮤니티 상태
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+
+   // 앱 시작 시 게시글 불러오기 (나중에 API로 교체)
+  useEffect(() => {
+    fetchPosts().then((data) => {
+      setPosts(data);
+    });
+  }, []);
 
   // 복지 목록 (나중에 여기를 API fetch 결과로 교체)
   const [welfares] = useState<WelfareType[]>(initialWelfares);
@@ -46,10 +55,33 @@ export default function App() {
   // 어떤 것들이 북마크 됐는지 id 배열로 관리
   const [bookmarkedWelfareIds, setBookmarkedWelfareIds] = useState<number[]>([]);
 
+  // 북마크 게시글 관리
+  const bookmarkedPosts = posts.filter((p) => p.isBookmarked);
+
   // 북마크 토글 핸들러
   const toggleWelfareBookmark = (id: number) => {
     setBookmarkedWelfareIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  // 게시글 좋아요 토글 (서비스 + 상태 반영)
+  const handleTogglePostLike = async (postId: number) => {
+    const updated = await toggleLike(postId); // postService에서 토글 후 업데이트 된 데이터 반환
+    if (!updated) return;
+
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? updated : p)),
+    );
+  };
+
+  // 게시글 북마크 토글 (서비스 + 상태 반영)
+  const handleTogglePostBookmark = async (postId: number) => {
+    const updated = await toggleBookmark(postId);
+    if (!updated) return;
+
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? updated : p)),
     );
   };
 
@@ -59,7 +91,7 @@ export default function App() {
   );
 
   // PostSubmit에서 사용
-  const addPost = (data: { title: string; preview: string; tags: string[] }) => {
+  const addPost = (data: { title: string; preview: string }) => {
     const nextId = posts.length ? posts[posts.length - 1].id + 1 : 1;
 
     const today = new Date();
@@ -71,10 +103,16 @@ export default function App() {
       id: nextId,
       title: data.title,
       preview: data.preview,
-      tags: data.tags,
       date: dateString,
       commentCount: 0,
       comments: initialComments,
+
+      // ✅ 새로 추가된 필드들 (postService의 Post 타입과 맞춰야 함)
+      hasCrisisFlag: false,
+      category: 'free',       // 기본값: 자유게시판 (UI에서 선택하게 바꿔도 됨)
+      likeCount: 0,
+      isLiked: false,
+      isBookmarked: false,
     };
 
     setPosts((prev) => [newPost, ...prev]);
@@ -196,6 +234,8 @@ export default function App() {
             <Navbar activePage="community" onNavigate={handleNavigate} />
             <Community
               posts={posts}
+              onToggleBookmark={handleTogglePostBookmark}
+              onToggleLike={handleTogglePostLike}
               onNavigate={handleNavigate}
               onPostClick={(id) => {
                 setSelectedPostId(id);
@@ -214,6 +254,8 @@ export default function App() {
               onNavigate={handleNavigate}
               post={post}
               onAddComment={addComment}
+              onToggleLike={handleTogglePostLike}
+              onToggleBookmark={handleTogglePostBookmark}
             />
           </>
         );
@@ -240,6 +282,12 @@ export default function App() {
             <MyPage
               onNavigate={handleNavigate}
               bookmarkedWelfares={bookmarkedWelfares}
+              onSelectWelfare={handleSelectWelfare}
+              bookmarkedPosts={bookmarkedPosts}
+              onSelectPost={(id) => {
+                setSelectedPostId(id);
+                handleNavigate('post-detail');
+              }}
             />
           </>
         );
