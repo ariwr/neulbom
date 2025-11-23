@@ -2,6 +2,9 @@
 
 AI 정서 지원 및 복지 정보 매칭 플랫폼 프론트엔드 (React + TypeScript + Vite)
 
+## Youtube
+https://youtube.com/channel/UCqw83Hrrls5O79R8MEme8XA?si=5_2WC3I_xzrIDLtX
+
 ## 기술 스택
 
 - **Framework**: React 18 + TypeScript
