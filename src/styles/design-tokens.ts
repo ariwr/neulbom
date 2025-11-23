@@ -6,7 +6,7 @@ export const colors = {
   pointYellow: '#f8d9a4',
   textDark: '#333333',
   textSub: '#666666',
-  lightGray: '#E8E8E8',
+  lightGray: '#f1f1f1ff',
   white: '#FFFFFF',
   error: '#ef4444',
   success: '#10b981',
