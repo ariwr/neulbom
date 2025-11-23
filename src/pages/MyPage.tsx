@@ -5,9 +5,10 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/ThemedButton';
 import { colors } from '../styles/design-tokens';
 import type { Welfare } from '../services/welfareService';
+import type { Page } from '../types/page';
 
 interface MyPageProps {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
   bookmarkedWelfares: Welfare[];
 }
 

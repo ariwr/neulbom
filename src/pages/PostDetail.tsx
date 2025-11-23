@@ -6,10 +6,11 @@ import { Badge } from '../components/ui/Badge';
 import { TextArea } from '../components/ui/ThemedTextArea';
 import { colors } from '../styles/design-tokens';
 import type { Post } from '../services/postService'
+import type { Page } from '../types/page';
 
 interface PostDetailProps {
   post: Post | null;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: Page) => void;
   onAddComment: (postId: number, content: string) => void;
 }
 

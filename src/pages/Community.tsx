@@ -6,10 +6,11 @@ import { Badge } from '../components/ui/Badge';
 import { PostCard } from '../components/PostCard';
 import { colors } from '../styles/design-tokens';
 import type { Post } from '../services/postService';
+import type { Page } from '../types/page';
 
 interface CommunityProps {
   posts: Post[];
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
   onPostClick?: (id: number) => void;
 }
 

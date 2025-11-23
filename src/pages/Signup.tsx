@@ -5,9 +5,10 @@ import { Card } from '../components/ui/ThemedCard';
 import { Badge } from '../components/ui/Badge';
 import { colors } from '../styles/design-tokens';
 import { ChevronLeft } from 'lucide-react';
+import type { Page } from '../types/page';
 
 interface SignupProps {
-  onNavigate: (page: string) => void;
+  onNavigate: (page: Page) => void;
 }
 
 export function Signup({ onNavigate }: SignupProps) {

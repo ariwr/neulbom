@@ -6,9 +6,10 @@ import { TextArea } from '../components/ui/ThemedTextArea';
 import { Button } from '../components/ui/ThemedButton';
 import { Badge } from '../components/ui/Badge';
 import { colors } from '../styles/design-tokens';
+import type { Page } from '../types/page';
 
 interface PostSubmitProps {
-  onNavigate: (page: string) => void;
+  onNavigate: (page: Page) => void;
   onSubmit: (data: {title: string; preview: string; tags: string[] }) => void;
 }
 

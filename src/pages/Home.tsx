@@ -4,12 +4,15 @@ import { WelfareCard } from '../components/WelfareCard';
 import { Card } from '../components/ui/ThemedCard';
 import { colors } from '../styles/design-tokens';
 import type { Welfare } from '../services/welfareService';
+import type { Page } from '../types/page';
 
 interface HomeProps {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
   welfares: Welfare[];
   bookmarkedIds: number[];
   onToggleBookmark: (id: number) => void;
+  // 복지 카드 클릭 시 상세로 이동시키는 콜백
+  onSelectWelfare?: (id: number) => void;
 }
 
 export function Home({
@@ -17,6 +20,7 @@ export function Home({
   welfares,
   bookmarkedIds,
   onToggleBookmark,
+  onSelectWelfare,
 }: HomeProps) {
   const [keyword, setKeyword] = useState('');
 
@@ -88,7 +92,8 @@ export function Home({
               eligibility={welfare.eligibility}
               isBookmarked={bookmarkedIds.includes(welfare.id)}
               onBookmark={() => onToggleBookmark(welfare.id)}
-              onClick={() => onNavigate?.('welfare-detail')}
+              // 클릭 시 상위(App)의 handleSelectWelfare 호출
+              onClick={() => onSelectWelfare?.(welfare.id)}
             />
           ))}
         </div>

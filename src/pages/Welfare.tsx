@@ -1,34 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, Grid, List } from 'lucide-react';
-import { Input } from '../components/ui/ThemedInput';
-import { Button } from '../components/ui/ThemedButton';
 import { Card } from '../components/ui/ThemedCard';
+import { Button } from '../components/ui/ThemedButton';
 import { Badge } from '../components/ui/Badge';
 import { WelfareCard } from '../components/WelfareCard';
 import { colors } from '../styles/design-tokens';
 import type { Welfare } from '../services/welfareService';
+import type { Page } from '../types/page';
 
 interface WelfareProps {
-  onNavigate?: (page: string) => void;
-  welfares: Welfare[];          // 전체 복지 목록
-  bookmarkedIds: number[];      // 북마크된 내용
-  onToggleBookmark: (id: number) => void;   // 토글 핸들러
+  onNavigate?: (page: Page) => void;
+  welfares: Welfare[];
+  bookmarkedIds: number[];
+  onToggleBookmark: (id: number) => void;
+  initialQuery?: string;   // ★ Home에서 검색어 전달 받을 준비
+  onSelectWelfare?: (id: number) => void;
 }
 
-export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark }: WelfareProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+export function Welfare({
+  onNavigate,
+  welfares,
+  bookmarkedIds,
+  onToggleBookmark,
+  onSelectWelfare,
+  initialQuery = '',  // 없으면 빈값
+}: WelfareProps) {
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
 
-  const filters = {
-    age: ['영유아', '아동', '청소년', '청년', '중장년', '노인'],
-    category: ['돌봄', '의료', '주거', '교육', '일자리', '생활지원'],
-    region: ['서울', '경기', '인천', '부산', '대구'],
-  };
+  // ⭐ "프론트 검색"은 임시 기능 → 나중에 API fetch로 대체 가능
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return welfares;
+
+    return welfares.filter((w) => {
+      const title = (w.title ?? '').toLowerCase();
+      const summary = (w.summary ?? '').toLowerCase();
+      const elig = w.eligibility.join(' ').toLowerCase();
+      return (
+        title.includes(q) ||
+        summary.includes(q) ||
+        elig.includes(q)
+      );
+    });
+  }, [welfares, searchQuery]);
 
   return (
     <div className="min-h-screen pb-20" style={{ backgroundColor: colors.lightGray }}>
-      {/* Search Header */}
+      {/* ================= 상단 헤더 ================= */}
       <section 
         className="py-12 px-4"
         style={{
@@ -39,9 +58,9 @@ export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark 
           <h1 className="text-2xl text-white mb-6 text-center">
             복지 서비스 검색
           </h1>
-          
-          {/* Search Bar */}
-          <Card variant="elevated" padding="sm">
+
+          {/* 검색창 */}
+          <Card variant="elevated" padding="sm" className="rounded-full">
             <div className="flex items-center space-x-3">
               <Search size={20} style={{ color: colors.textSub }} />
               <input
@@ -49,16 +68,13 @@ export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark 
                 placeholder="필요한 복지 서비스를 검색하세요"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 outline-none text-base"
+                className="flex-1 outline-none text-base bg-transparent"
                 style={{ color: colors.textDark }}
               />
-              <Button variant="primary" size="sm">
-                검색
-              </Button>
             </div>
           </Card>
 
-          {/* Quick Filters */}
+          {/* 태그 (빠른 필터) */}
           <div className="flex flex-wrap gap-2 mt-4 justify-center">
             {['전체', '노인돌봄', '장애인지원', '아동돌봄', '의료지원'].map((tag) => (
               <Badge key={tag} variant="default" size="md">
@@ -69,7 +85,7 @@ export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark 
         </div>
       </section>
 
-      {/* Filter & View Controls */}
+      {/* ================= 정렬/뷰컨트롤 ================= */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-2">
@@ -77,10 +93,10 @@ export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark 
               필터
             </Button>
             <span className="text-sm" style={{ color: colors.textSub }}>
-              총 {welfares.length}개
+              총 {filtered.length}개
             </span>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setViewMode('grid')}
@@ -105,20 +121,25 @@ export function Welfare({ onNavigate, welfares, bookmarkedIds, onToggleBookmark 
           </div>
         </div>
 
-        {/* Results Grid */}
-        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
-          {welfares.map((welfare, index) => (
+        {/* ================= 목록 ================= */}
+        <div className={`grid gap-6 ${viewMode === 'grid'
+            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+            : 'grid-cols-1'
+          }`}
+        >
+          {filtered.map((welfare) => (
             <WelfareCard
-              key={index}
+              key={welfare.id}
               title={welfare.title}
               summary={welfare.summary}
               eligibility={welfare.eligibility}
-              onClick={() => onNavigate?.('welfare-detail')}
+              isBookmarked={bookmarkedIds.includes(welfare.id)}
+              onBookmark={() => onToggleBookmark(welfare.id)}
+              onClick={() => onSelectWelfare?.(welfare.id)}
             />
           ))}
         </div>
 
-        {/* Load More */}
         <div className="text-center mt-8">
           <Button variant="outline" size="md">
             더 보기

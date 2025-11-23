@@ -3,9 +3,10 @@ import { Input } from '../components/ui/ThemedInput';
 import { Button } from '../components/ui/ThemedButton';
 import { Card } from '../components/ui/ThemedCard';
 import { colors } from '../styles/design-tokens';
+import type { Page } from '../types/page';
 
 interface LoginProps {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: Page) => void;
 }
 
 export function Login({ onNavigate }: LoginProps) {

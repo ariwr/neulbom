@@ -1,14 +1,22 @@
 import React from 'react';
 import { MessageCircle, Gift, Users, User } from 'lucide-react';
 import { colors } from '../../styles/design-tokens';
+import type { Page } from '../../types/page';
 
 interface NavbarProps {
-  activePage: string;
-  onNavigate: (page: string) => void;
+  activePage: Page;
+  onNavigate: (page: Page) => void;
+}
+
+// NavItem type 정의
+type NavItem = {
+  id: Page;
+  label: string;
+  icon: React.ComponentType<{ size?: number}>;
 }
 
 // 홈/마이페이지 제외한 메뉴만 정의
-const navItems = [
+const navItems: NavItem[] = [
   { id: 'chat', label: '챗봇', icon: MessageCircle },
   { id: 'community', label: '커뮤니티', icon: Users },
 ];
