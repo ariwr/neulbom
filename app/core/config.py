@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # LLM Provider Selection
     DEFAULT_LLM_PROVIDER: str = "upstage"  # "gemini" or "upstage"
     
+    # LLM API URLs
+    UPSTAGE_API_URL: str = "https://api.upstage.ai/v1/chat/completions"
+    UPSTAGE_EMBEDDING_API_URL: str = "https://api.upstage.ai/v1/embeddings"
+    
     # JWT Settings
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
@@ -17,6 +21,16 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = "sqlite:///./neulbom.db"
+    
+    # CORS Settings
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ]
     
     # RAG Settings
     VECTOR_DB_PATH: str = "./data/vector_db"

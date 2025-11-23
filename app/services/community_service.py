@@ -23,32 +23,44 @@ def create_post_with_ai_check(
 ) -> models.Post:
     """
     게시글 작성 (AI 필터링 적용)
-    - 위기 감지
+    - 위기 감지 (AI 분석 실패 시에도 게시글 작성 가능)
     - 고위험 게시글 차단 또는 관리자 알림
     
     Raises:
         ValueError: 고위험 게시글이 감지된 경우
     """
+    is_crisis = False
+    crisis_analysis = None
+    
     try:
-        # AI 위기 감지
-        crisis_analysis = analyze_crisis_level(post_data.content)
-        is_crisis = crisis_analysis["is_crisis"]
+        # AI 위기 감지 (실패해도 게시글 작성은 계속 진행)
+        try:
+            crisis_analysis = analyze_crisis_level(post_data.content)
+            is_crisis = crisis_analysis.get("is_crisis", False)
+            
+            # 고위험 게시글은 차단
+            if crisis_analysis.get("level") == "high":
+                # 관리자 알림 발송
+                send_admin_alert(post_id=None, crisis_analysis=crisis_analysis, post_content=post_data.content)
+                logger.warning(f"고위험 게시글 차단: author_id={author_id}, detection_method={crisis_analysis.get('detection_method', 'unknown')}")
+                # 위기 감지 에러 코드 포함 (JSON 문자열로 변환)
+                import json
+                error_detail = {
+                    "code": "CRISIS_DETECTED",
+                    "message": "부적절한 내용이 감지되어 게시글을 등록할 수 없습니다.",
+                    "crisis_info": crisis_analysis.get("info")
+                }
+                raise ValueError(json.dumps(error_detail))
+        except ValueError:
+            # 위기 게시글 차단은 그대로 전파
+            raise
+        except Exception as ai_error:
+            # AI 분석 실패 시에도 게시글 작성은 계속 진행
+            logger.warning(f"AI 위기 감지 분석 실패 (게시글 작성은 계속 진행): {ai_error}")
+            # 기본값으로 진행 (is_crisis=False)
+            is_crisis = False
         
-        # 고위험 게시글은 차단
-        if crisis_analysis["level"] == "high":
-            # 관리자 알림 발송
-            send_admin_alert(post_id=None, crisis_analysis=crisis_analysis, post_content=post_data.content)
-            logger.warning(f"고위험 게시글 차단: author_id={author_id}, detection_method={crisis_analysis.get('detection_method', 'unknown')}")
-            # 위기 감지 에러 코드 포함 (JSON 문자열로 변환)
-            import json
-            error_detail = {
-                "code": "CRISIS_DETECTED",
-                "message": "부적절한 내용이 감지되어 게시글을 등록할 수 없습니다.",
-                "crisis_info": crisis_analysis.get("info")
-            }
-            raise ValueError(json.dumps(error_detail))
-        
-        # 게시글 생성
+        # 게시글 생성 (AI 분석 실패 여부와 관계없이 진행)
         post = create_post(
             db=db,
             post_data=post_data,
@@ -56,10 +68,13 @@ def create_post_with_ai_check(
             is_crisis=is_crisis
         )
         
-        # 중간 위험 게시글 탐지 시 관리자 알림
-        if crisis_analysis["level"] == "medium":
-            send_admin_alert(post.id, crisis_analysis, post_data.content)
-            logger.info(f"중간 위험 게시글 알림: post_id={post.id}, author_id={author_id}")
+        # 중간 위험 게시글 탐지 시 관리자 알림 (AI 분석이 성공한 경우에만)
+        if crisis_analysis and crisis_analysis.get("level") == "medium":
+            try:
+                send_admin_alert(post.id, crisis_analysis, post_data.content)
+                logger.info(f"중간 위험 게시글 알림: post_id={post.id}, author_id={author_id}")
+            except Exception as alert_error:
+                logger.warning(f"관리자 알림 발송 실패 (게시글은 정상 작성됨): {alert_error}")
         
         return post
     except ValueError:

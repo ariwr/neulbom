@@ -2,6 +2,7 @@
 채팅 서비스
 - 대화 내역 저장
 - 위기 감지 결과에 따른 분기 처리
+- RAG 엔진을 통한 복지 정보 검색 및 답변 생성
 """
 
 from typing import List, Dict, Optional
@@ -10,6 +11,10 @@ from app.models import schema
 from app.ai_core.llm_client import llm_client
 from app.ai_core.prompts import CHATBOT_SYSTEM_PROMPT, CBT_PROMPT
 from app.ai_core.safety_guard import detect_crisis, analyze_crisis_level, get_crisis_info
+from app.ai_core.rag_engine import search_context
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_chat_response(
@@ -44,19 +49,20 @@ def get_chat_response(
     if is_crisis:
         # 위기 수준에 따른 차별화된 응답
         if crisis_level == "high":
-            reply = "지금 정말 힘든 상황이시군요. 혼자 견디기 어려운 상황이라면 즉시 전문가의 도움이 필요해요. 보건복지콜센터(129)로 연락하시거나, 주변에 도움을 요청하는 것도 용기 있는 행동이에요. 당신은 혼자가 아니에요."
+            from app.core.config import settings
+            reply = f"지금 정말 힘든 상황이시군요. 혼자 견디기 어려운 상황이라면 즉시 전문가의 도움이 필요해요. 보건복지콜센터({settings.CRISIS_HOTLINE})로 연락하시거나, 주변에 도움을 요청하는 것도 용기 있는 행동이에요. 당신은 혼자가 아니에요."
             crisis_info = crisis_analysis.get("info")
         elif crisis_level == "medium":
             reply = "지금 많이 힘드시는 것 같아요. 이런 감정을 느끼는 것은 당연해요. 혼자 견디기 어려운 상황이라면 전문가의 도움이 필요할 수 있어요. 주변에 도움을 요청하는 것도 용기 있는 행동이에요."
             crisis_info = crisis_analysis.get("info")
         else:
             # 낮은 수준의 위기 감지 시: 전문가 안내 + CBT 기법 적용
-            reply = generate_empathic_response(message, history)
+            reply = generate_empathic_response(message, history, db=db)
             # 낮은 수준이지만 위기로 감지된 경우에도 정보 제공
             crisis_info = crisis_analysis.get("info")
     else:
         # 일반 대화 응답 (CBT 기법 포함)
-        reply = generate_empathic_response(message, history)
+        reply = generate_empathic_response(message, history, db=db)
         crisis_info = None
     
     # TODO: 대화 내역 DB 저장
@@ -70,15 +76,14 @@ def get_chat_response(
     )
 
 
-def generate_empathic_response(message: str, history: List[Dict]) -> str:
+def generate_empathic_response(message: str, history: List[Dict], db: Optional[Session] = None) -> str:
     """
     공감형 응답 생성
     - LLM API 통합
     - 긍정 심리학 기반 CBT 유도 프롬프트 적용
     - 부정적 감정 감지 시 명시적 CBT 기법 적용
+    - 복지 정보 관련 질문 시 RAG 엔진을 통해 관련 정보 검색
     """
-    import logging
-    logger = logging.getLogger(__name__)
     
     # 부정적 감정 키워드 감지
     negative_keywords = ["힘들", "어려", "스트레스", "우울", "불안", "두려", "외로", 
@@ -99,6 +104,35 @@ def generate_empathic_response(message: str, history: List[Dict]) -> str:
             logger.debug(f"감정 분석 실패: {e}")
             pass
     
+    # 복지 정보 관련 질문인지 확인 (키워드 기반 간단한 감지)
+    welfare_keywords = ["복지", "지원", "혜택", "수당", "급여", "장학금", "주거", "의료", "보육", "양육", "출산", "청년", "노인", "장애인"]
+    is_welfare_query = any(keyword in message for keyword in welfare_keywords)
+    
+    # RAG 엔진을 통해 관련 복지 정보 검색 (복지 관련 질문인 경우)
+    welfare_context = None
+    if is_welfare_query and db:
+        try:
+            welfare_ids = search_context(query=message, limit=5)
+            if welfare_ids:
+                from app.models import models
+                welfares = db.query(models.Welfare).filter(
+                    models.Welfare.id.in_(welfare_ids)
+                ).all()
+                if welfares:
+                    # 상위 3개만 컨텍스트로 사용
+                    context_texts = []
+                    for welfare in welfares[:3]:
+                        context_text = f"제목: {welfare.title}\n"
+                        if welfare.summary:
+                            context_text += f"요약: {welfare.summary}\n"
+                        elif welfare.full_text:
+                            context_text += f"내용: {welfare.full_text[:200]}...\n"
+                        context_texts.append(context_text)
+                    welfare_context = "\n\n".join(context_texts)
+                    logger.info(f"RAG 검색 결과: {len(welfares)}개 복지 정보 발견")
+        except Exception as e:
+            logger.error(f"RAG 검색 실패: {e}")
+    
     # 히스토리 포맷팅 (LLM이 이해할 수 있는 형식으로)
     formatted_history = []
     for h in history:
@@ -112,6 +146,17 @@ def generate_empathic_response(message: str, history: List[Dict]) -> str:
     if formatted_history:
         logger.debug(f"히스토리 샘플: {formatted_history[-2:] if len(formatted_history) >= 2 else formatted_history}")
     
+    # 시스템 프롬프트에 복지 정보 컨텍스트 추가
+    system_prompt = CHATBOT_SYSTEM_PROMPT
+    if welfare_context:
+        system_prompt = f"""{CHATBOT_SYSTEM_PROMPT}
+
+사용자가 복지 정보에 대해 질문하고 있습니다. 아래 관련 복지 정보를 참고하여 답변해주세요:
+
+{welfare_context}
+
+위 정보를 바탕으로 사용자의 질문에 정확하고 도움이 되는 답변을 제공해주세요."""
+    
     try:
         # 부정적 감정이 강하게 감지된 경우 CBT 기법 명시적 적용
         # sentiment_score가 None이어도(감정 분석 실패) 부정적 키워드가 있으면 CBT 적용 시도
@@ -120,21 +165,21 @@ def generate_empathic_response(message: str, history: List[Dict]) -> str:
             reply = llm_client.generate_chat_response(
                 message=message,
                 history=formatted_history,
-                system_prompt=CHATBOT_SYSTEM_PROMPT
+                system_prompt=system_prompt
             )
         elif has_positive_emotion:
             # 긍정적 감정일 때는 감사 일기 기록 유도
             reply = llm_client.generate_chat_response(
                 message=message,
                 history=formatted_history,
-                system_prompt=CHATBOT_SYSTEM_PROMPT
+                system_prompt=system_prompt
             )
         else:
             # 일반 대화 - 히스토리를 활용하여 자연스러운 대화
             reply = llm_client.generate_chat_response(
                 message=message,
                 history=formatted_history,
-                system_prompt=CHATBOT_SYSTEM_PROMPT
+                system_prompt=system_prompt
             )
         
         # 응답 검증 및 정제

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
+import logging
 
 from app.models.connection import get_db
 from app.models import models, schema
@@ -11,11 +12,32 @@ from app.models.crud import (
 )
 from app.services.auth_service import get_optional_user, require_level
 from app.services.welfare_service import search_welfare_with_profile
-from fastapi import BackgroundTasks
 # 크롤링 기능은 backup_crawling 폴더로 이동됨
 # from app.services.crawler_service import crawl_and_save_welfares
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/welfare", tags=["welfare"])
+
+
+def _clean_welfare_items(welfares: List[models.Welfare]) -> List[schema.WelfareItem]:
+    """복지 정보 목록의 summary를 정제하여 WelfareItem 리스트로 변환"""
+    result = []
+    for welfare in welfares:
+        cleaned_summary = schema.clean_welfare_summary(welfare.summary, welfare.full_text)
+        welfare_dict = {
+            'id': welfare.id,
+            'title': welfare.title,
+            'summary': cleaned_summary,
+            'source_link': welfare.source_link,
+            'region': welfare.region,
+            'apply_start': welfare.apply_start,
+            'apply_end': welfare.apply_end,
+            'is_always': welfare.is_always,
+            'status': welfare.status,
+        }
+        result.append(schema.WelfareItem(**welfare_dict))
+    return result
 
 
 def increment_welfare_view_count(db: Session, welfare_id: int, user_id: Optional[int] = None):
@@ -32,8 +54,6 @@ def increment_welfare_view_count(db: Session, welfare_id: int, user_id: Optional
                 db.commit()
     except Exception as e:
         # 조회수 증가 실패는 로그만 남기고 무시
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"조회수 증가 실패: welfare_id={welfare_id}, error={e}")
 
 
@@ -55,23 +75,36 @@ def search_welfare(
     - 로그인한 경우 사용자 프로필 기반 필터링 적용
     - 검색 결과의 조회수 증가 (비동기 처리)
     """
-    welfares = search_welfare_with_profile(
-        db=db,
-        keyword=keyword,
-        region=region,
-        age=age,
-        care_target=care_target,
-        user=current_user,
-        skip=skip,
-        limit=limit
-    )
-    
-    # 검색 결과의 조회수 증가 (비동기 처리)
-    user_id = current_user.id if current_user else None
-    for welfare in welfares:
-        background_tasks.add_task(increment_welfare_view_count, db, welfare.id, user_id)
-    
-    return welfares
+    try:
+        user_id = current_user.id if current_user else None
+        logger.info(f"복지 검색 요청: keyword={keyword}, region={region}, age={age}, care_target={care_target}, skip={skip}, limit={limit}, user_id={user_id}")
+        
+        welfares = search_welfare_with_profile(
+            db=db,
+            keyword=keyword,
+            region=region,
+            age=age,
+            care_target=care_target,
+            user=None,  # 검색 시 사용자 프로필 필터링 비활성화 (검색 결과 제한 방지)
+            skip=skip,
+            limit=limit
+        )
+        
+        logger.info(f"검색 결과: {len(welfares)}개 복지 정보 발견")
+        
+        # 검색 결과의 조회수 증가 (비동기 처리)
+        user_id = current_user.id if current_user else None
+        for welfare in welfares:
+            background_tasks.add_task(increment_welfare_view_count, db, welfare.id, user_id)
+        
+        # summary 정제 및 생성
+        cleaned_items = _clean_welfare_items(welfares)
+        logger.info(f"정제 후 결과: {len(cleaned_items)}개")
+        return cleaned_items
+    except Exception as e:
+        logger.error(f"복지 정보 검색 중 오류 발생: keyword={keyword}, error={e}", exc_info=True)
+        # 에러가 발생해도 빈 배열 반환 (서버 크래시 방지)
+        return []
 
 
 @router.post("/{welfare_id}/bookmark")
@@ -120,8 +153,31 @@ def get_bookmarks(
     """
     bookmarks, total = get_user_bookmarks(db, current_user.id, skip=skip, limit=limit)
     
+    # 북마크의 welfare summary 정제
+    cleaned_items = []
+    for bookmark in bookmarks:
+        if bookmark.welfare:
+            cleaned_summary = schema.clean_welfare_summary(bookmark.welfare.summary, bookmark.welfare.full_text)
+            welfare_item = schema.WelfareItem(
+                id=bookmark.welfare.id,
+                title=bookmark.welfare.title,
+                summary=cleaned_summary,
+                source_link=bookmark.welfare.source_link,
+                region=bookmark.welfare.region,
+                apply_start=bookmark.welfare.apply_start,
+                apply_end=bookmark.welfare.apply_end,
+                is_always=bookmark.welfare.is_always,
+                status=bookmark.welfare.status,
+            )
+            cleaned_items.append(schema.BookmarkItem(
+                id=bookmark.id,
+                welfare_id=bookmark.welfare_id,
+                welfare=welfare_item,
+                created_at=bookmark.created_at,
+            ))
+    
     return schema.BookmarkListResponse(
-        items=bookmarks,
+        items=cleaned_items,
         total=total,
         skip=skip,
         limit=limit
@@ -198,11 +254,11 @@ def get_active_welfare_list(
     - Level 1 (비회원) 이상 접근 가능
     """
     welfares = get_active_welfares(db, skip=skip, limit=limit)
-    return welfares
+    return _clean_welfare_items(welfares)
 
 
 @router.get("/recommend/popular", response_model=List[schema.WelfareItem])
-def read_popular_welfares(
+def get_popular_welfares(
     limit: int = Query(10, ge=1, le=50, description="반환할 복지 정보 개수"),
     db: Session = Depends(get_db)
 ):
@@ -210,8 +266,13 @@ def read_popular_welfares(
     인기 복지 정보 조회 (조회수 기준)
     - Level 1 (비회원) 이상 접근 가능
     """
-    welfares = crud_get_popular_welfares(db, limit=limit)
-    return welfares
+    try:
+        welfares = crud_get_popular_welfares(db, limit=limit)
+        return _clean_welfare_items(welfares)
+    except Exception as e:
+        logger.error(f"인기 복지 정보 조회 중 오류 발생: error={e}", exc_info=True)
+        # 에러가 발생해도 빈 배열 반환 (서버 크래시 방지)
+        return []
 
 
 @router.get("/recommend/recent", response_model=List[schema.WelfareItem])
@@ -225,12 +286,17 @@ def get_recent_welfares(
     - Level 2 (일반 회원) 이상 접근 가능
     - 로그인하지 않은 경우 빈 배열 반환
     """
-    if not current_user or current_user.level < 2:
+    try:
+        if not current_user or current_user.level < 2:
+            return []
+        
+        view_logs = get_user_recent_welfare_views(db, current_user.id, limit=limit)
+        welfares = [log.welfare for log in view_logs if log.welfare]
+        return _clean_welfare_items(welfares)
+    except Exception as e:
+        logger.error(f"최근 본 복지 정보 조회 중 오류 발생: error={e}", exc_info=True)
+        # 에러가 발생해도 빈 배열 반환 (서버 크래시 방지)
         return []
-    
-    view_logs = get_user_recent_welfare_views(db, current_user.id, limit=limit)
-    welfares = [log.welfare for log in view_logs if log.welfare]
-    return welfares
 
 
 @router.get("/{welfare_id}", response_model=schema.WelfareDetail)
@@ -253,5 +319,23 @@ def get_welfare_detail(
     user_id = current_user.id if current_user else None
     background_tasks.add_task(increment_welfare_view_count, db, welfare_id, user_id)
     
-    return welfare
+    # summary 정제
+    cleaned_summary = schema.clean_welfare_summary(welfare.summary, welfare.full_text)
+    
+    return schema.WelfareDetail(
+        id=welfare.id,
+        title=welfare.title,
+        summary=cleaned_summary,
+        full_text=welfare.full_text,
+        source_link=welfare.source_link,
+        region=welfare.region,
+        age_min=welfare.age_min,
+        age_max=welfare.age_max,
+        care_target=welfare.care_target,
+        apply_start=welfare.apply_start,
+        apply_end=welfare.apply_end,
+        is_always=welfare.is_always,
+        status=welfare.status,
+        category=welfare.category,
+    )
 

@@ -144,14 +144,18 @@ def search_welfares(
         query = query.filter(models.Welfare.region.contains(region))
     
     if age:
+        # 나이 필터링: age_min <= age <= age_max 조건
+        # age_min이 None이면 제한 없음, age_max가 None이면 제한 없음
         query = query.filter(
-            or_(
-                models.Welfare.age_min.is_(None),
-                models.Welfare.age_min <= age
-            ),
-            or_(
-                models.Welfare.age_max.is_(None),
-                models.Welfare.age_max >= age
+            and_(
+                or_(
+                    models.Welfare.age_min.is_(None),
+                    models.Welfare.age_min <= age
+                ),
+                or_(
+                    models.Welfare.age_max.is_(None),
+                    models.Welfare.age_max >= age
+                )
             )
         )
     
@@ -308,24 +312,51 @@ def create_post(
         # 익명 ID 생성
         anonymous_id = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
         
-        # 카테고리 Enum 변환
+        # 카테고리 Enum 변환 (SQLite 호환)
         from app.models.models import PostCategory
-        category_enum = PostCategory(post_data.category) if post_data.category else PostCategory.FREE
+        try:
+            # post_data.category가 문자열이면 Enum으로 변환, 이미 Enum이면 그대로 사용
+            if isinstance(post_data.category, str):
+                category_enum = PostCategory(post_data.category.lower())
+            elif isinstance(post_data.category, PostCategory):
+                category_enum = post_data.category
+            else:
+                category_enum = PostCategory.FREE
+        except (ValueError, AttributeError):
+            # 잘못된 카테고리 값이면 기본값 사용
+            logger.warning(f"잘못된 카테고리 값: {post_data.category}, 기본값 'free' 사용")
+            category_enum = PostCategory.FREE
         
-        db_post = models.Post(
-            title=post_data.title,
-            content=post_data.content,
-            category=category_enum,
-            author_id=author_id,
-            anonymous_id=anonymous_id,
-            is_crisis=is_crisis,
-            crisis_checked=True,
-            view_count=0,
-            like_count=0
-        )
+        # Post 객체 생성 시 모든 필수 필드 확인
+        post_kwargs = {
+            "title": post_data.title,
+            "content": post_data.content,
+            "category": category_enum,
+            "author_id": author_id,
+            "anonymous_id": anonymous_id,
+            "is_crisis": is_crisis,
+            "crisis_checked": True,
+            "view_count": 0,
+            "like_count": 0
+        }
+        
+        # 디버깅: 생성할 데이터 로깅
+        logger.debug(f"게시글 생성 시도: author_id={author_id}, category={category_enum}, title={post_data.title[:50]}")
+        
+        db_post = models.Post(**post_kwargs)
         db.add(db_post)
+        
+        # flush를 먼저 실행하여 오류를 빠르게 감지
+        try:
+            db.flush()
+        except Exception as flush_error:
+            logger.error(f"게시글 flush 실패: {flush_error}", exc_info=True)
+            safe_rollback(db)
+            raise
+        
         safe_commit(db)
         db.refresh(db_post)
+        logger.info(f"게시글 생성 성공: post_id={db_post.id}, author_id={author_id}")
         return db_post
     except Exception as e:
         safe_rollback(db)

@@ -51,20 +51,14 @@ test_*.py
 *_test.py
 scripts/test_*.py
 
-# Node modules
+# Frontend files (프론트엔드 파일이 혼재되어 있어서 추가)
+src/
+index.html
+vite.config.ts
+package.json
+package-lock.json
 node_modules/
-
-# Next.js build
-.next/
-out/
-
-# Dependency files
-yarn-error.log
-pnpm-debug.log
-npm-debug.log
-
-# Local config
-*.local
-
-# TypeScript
+.vite/
+build/
+dist/
 *.tsbuildinfo

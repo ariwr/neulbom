@@ -189,21 +189,20 @@ def similarity_search(
     return vector_store.search(np.array(query_embedding), k=limit)
 
 
-def search_welfare_rag(
-    db: Session,
+def search_context(
     query: str,
-    region: Optional[str] = None,
-    age: Optional[int] = None,
     limit: int = 10
-) -> List[models.Welfare]:
+) -> List[int]:
     """
-    하이브리드 검색 (Hybrid Search)
-    - Semantic Search (벡터 유사도) + Keyword Search 결합
-    - Metadata Filtering (지역/나이 필터)
-    - LLM 요약 생성
-    """
-    from app.models.crud import search_welfares
+    순수 검색 엔진: 쿼리를 입력받아 Vector DB에서 관련 문서 ID를 검색해 반환
     
+    Args:
+        query: 검색 쿼리 (질문)
+        limit: 반환할 결과 수
+        
+    Returns:
+        관련 문서(welfare) ID 리스트 (유사도 순)
+    """
     # 빈 쿼리 처리
     if not query or not query.strip():
         logger.warning("빈 쿼리로 검색 시도")
@@ -212,139 +211,14 @@ def search_welfare_rag(
     query = query.strip()
     
     try:
-        # 1. 벡터 유사도 검색 (Semantic Search)
-        try:
-            query_embedding = get_embedding(query, is_query=True)
-            vector_welfare_ids = similarity_search(query_embedding, limit=limit * 3)
-            logger.debug(f"벡터 검색 결과: {len(vector_welfare_ids)}개")
-        except Exception as e:
-            logger.error(f"벡터 검색 실패: {e}")
-            vector_welfare_ids = []
-        
-        # 2. 키워드 검색 (Keyword Search)
-        try:
-            keyword_welfares = search_welfares(
-                db=db,
-                keyword=query,
-                region=None,  # 필터링은 나중에
-                age=None,
-                skip=0,
-                limit=limit * 3
-            )
-            keyword_welfare_ids = [w.id for w in keyword_welfares]
-            logger.debug(f"키워드 검색 결과: {len(keyword_welfare_ids)}개")
-        except Exception as e:
-            logger.error(f"키워드 검색 실패: {e}")
-            keyword_welfare_ids = []
-    
-        
-        # 3. 하이브리드 점수 계산을 위한 통합 ID 리스트
-        all_welfare_ids = list(set(vector_welfare_ids + keyword_welfare_ids))
-        
-        if not all_welfare_ids:
-            # 검색 결과가 없으면 빈 리스트 반환
-            logger.info(f"검색 결과 없음: '{query}'")
-            return []
-        
-        # 4. DB에서 복지 정보 조회
-        try:
-            welfares = db.query(models.Welfare).filter(
-                models.Welfare.id.in_(all_welfare_ids)
-            ).all()
-            
-            if not welfares:
-                logger.warning(f"DB에서 복지 정보를 찾을 수 없음: {len(all_welfare_ids)}개 ID")
-                return []
-        except Exception as e:
-            logger.error(f"DB 조회 실패: {e}")
-            return []
-        
-        # 5. 하이브리드 점수 계산 및 정렬
-        welfare_dict = {w.id: w for w in welfares}
-        scored_welfares = []
-        
-        for welfare_id in all_welfare_ids:
-            if welfare_id not in welfare_dict:
-                continue
-            
-            welfare = welfare_dict[welfare_id]
-            
-            # 벡터 검색 점수 (순위 기반, 높을수록 좋음)
-            vector_score = 0.0
-            if welfare_id in vector_welfare_ids:
-                vector_rank = vector_welfare_ids.index(welfare_id)
-                vector_score = 1.0 / (vector_rank + 1)  # 순위가 높을수록 점수 높음
-            
-            # 키워드 검색 점수 (순위 기반)
-            keyword_score = 0.0
-            if welfare_id in keyword_welfare_ids:
-                keyword_rank = keyword_welfare_ids.index(welfare_id)
-                keyword_score = 1.0 / (keyword_rank + 1)
-            
-            # 키워드 매칭 보너스 (제목/요약에 직접 포함된 경우)
-            keyword_bonus = 0.0
-            query_lower = query.lower()
-            if welfare.title and query_lower in welfare.title.lower():
-                keyword_bonus += 0.5
-            if welfare.summary and query_lower in welfare.summary.lower():
-                keyword_bonus += 0.3
-            
-            # 하이브리드 점수 (벡터 60% + 키워드 40% + 보너스)
-            hybrid_score = (vector_score * 0.6) + (keyword_score * 0.4) + keyword_bonus
-            
-            scored_welfares.append((hybrid_score, welfare))
-        
-        # 점수 순으로 정렬
-        scored_welfares.sort(key=lambda x: x[0], reverse=True)
-        welfares = [w for _, w in scored_welfares]
-        
-        # 6. 지역/나이 필터링 (Metadata Filtering)
-        if region:
-            before_filter = len(welfares)
-            welfares = [w for w in welfares if region in (w.region or "")]
-            logger.debug(f"지역 필터링: {before_filter}개 -> {len(welfares)}개")
-        
-        if age:
-            before_filter = len(welfares)
-            welfares = [
-                w for w in welfares
-                if (w.age_min is None or w.age_min <= age) and
-                   (w.age_max is None or w.age_max >= age)
-            ]
-            logger.debug(f"나이 필터링: {before_filter}개 -> {len(welfares)}개")
-        
-        # 7. 상위 limit개만 반환
-        welfares = welfares[:limit]
-        
-        # 8. LLM을 사용하여 17세 수준으로 3줄 요약 생성
-        for welfare in welfares:
-            if not welfare.summary and welfare.full_text:
-                try:
-                    welfare.summary = summarize_welfare(welfare.full_text)
-                except Exception as e:
-                    logger.error(f"요약 생성 오류 (ID: {welfare.id}): {e}")
-                    # 요약 실패 시 기본 요약 사용
-                    welfare.summary = welfare.full_text[:200] + "..." if len(welfare.full_text) > 200 else welfare.full_text
-        
-        logger.info(f"하이브리드 검색 완료: '{query}' -> {len(welfares)}개 결과")
-        return welfares
-    
+        # 벡터 유사도 검색 (Semantic Search)
+        query_embedding = get_embedding(query, is_query=True)
+        welfare_ids = similarity_search(query_embedding, limit=limit)
+        logger.debug(f"벡터 검색 결과: {len(welfare_ids)}개")
+        return welfare_ids
     except Exception as e:
-        logger.error(f"하이브리드 검색 중 오류 발생: {e}", exc_info=True)
-        # 오류 발생 시 키워드 검색으로 대체
-        try:
-            logger.info(f"키워드 검색으로 대체 시도: '{query}'")
-            return search_welfares(
-                db=db,
-                keyword=query,
-                region=region,
-                age=age,
-                skip=0,
-                limit=limit
-            )
-        except Exception as fallback_error:
-            logger.error(f"키워드 검색 대체도 실패: {fallback_error}")
-            return []
+        logger.error(f"벡터 검색 실패: {e}")
+        return []
 
 
 def summarize_welfare(text: str, target_level: str = "17세") -> str:

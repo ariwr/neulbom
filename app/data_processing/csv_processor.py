@@ -10,6 +10,7 @@ import pandas as pd
 from typing import List, Dict, Optional
 from datetime import datetime
 import re
+import html
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent.parent
@@ -42,6 +43,8 @@ def clean_text(text: str) -> str:
         return ""
     
     text = str(text).strip()
+    # HTML 엔티티 디코딩 (예: &middot; → ·, &nbsp; → 공백)
+    text = html.unescape(text)
     # HTML 태그 제거
     text = re.sub(r'<[^>]+>', '', text)
     # 연속된 공백 제거
@@ -115,6 +118,24 @@ def parse_contact_info(contact_text: str) -> Dict[str, str]:
     }
 
 
+def extract_site_url(organization_text: str) -> Optional[str]:
+    """서비스기관 컬럼에서 URL을 추출합니다."""
+    if not organization_text or pd.isna(organization_text):
+        return None
+    
+    organization_text = str(organization_text)
+    
+    # URL 패턴 찾기 (http:// 또는 https://로 시작하는 URL)
+    url_pattern = r'(https?://[^\s,，]+)'
+    urls = re.findall(url_pattern, organization_text)
+    
+    if urls:
+        # 첫 번째 URL 반환
+        return urls[0].strip()
+    
+    return None
+
+
 def parse_date(date_str: str) -> Optional[datetime]:
     """날짜 문자열을 파싱합니다."""
     if not date_str or pd.isna(date_str):
@@ -131,21 +152,39 @@ def parse_date(date_str: str) -> Optional[datetime]:
             return None
 
 
-def process_csv_row(row: pd.Series) -> Dict:
+def process_csv_row(row: pd.Series, df_columns: List[str] = None) -> Dict:
     """CSV 행을 처리하여 Welfare 모델에 맞는 딕셔너리로 변환합니다."""
-    # CSV 컬럼명 (실제 파일 확인 후 수정 필요)
-    # 예상 컬럼: 서비스ID, 서비스명, 서비스URL, 서비스내용, 서비스기관, 연락처, 담당부서, 서비스대상, 기준년도, 기준일자
+    # CSV 컬럼명 확인
+    # 예상 컬럼: 서비스ID, 서비스명, 서비스URL, 서비스내용, 서비스기관, 연락처, 담당부서, 서비스대상, 기준년도, 기준일자, 서비스요약
     
-    service_id = str(row.iloc[0]) if len(row) > 0 else ""
-    title = clean_text(row.iloc[1]) if len(row) > 1 else ""
-    url = str(row.iloc[2]) if len(row) > 2 else ""
-    content = clean_text(row.iloc[3]) if len(row) > 3 else ""
-    organization = clean_text(row.iloc[4]) if len(row) > 4 else ""
-    contact = clean_text(row.iloc[5]) if len(row) > 5 else ""
-    department = clean_text(row.iloc[6]) if len(row) > 6 else ""
-    target = clean_text(row.iloc[7]) if len(row) > 7 else ""
-    year = str(row.iloc[8]) if len(row) > 8 else ""
-    date = str(row.iloc[9]) if len(row) > 9 else ""
+    # 컬럼명 기반 접근 시도
+    if df_columns is not None:
+        column_dict = {col: idx for idx, col in enumerate(df_columns)}
+        
+        service_id = str(row.iloc[column_dict.get('서비스ID', 0)]) if '서비스ID' in column_dict else (str(row.iloc[0]) if len(row) > 0 else "")
+        title = clean_text(row.iloc[column_dict.get('서비스명', 1)]) if '서비스명' in column_dict else (clean_text(row.iloc[1]) if len(row) > 1 else "")
+        url = str(row.iloc[column_dict.get('서비스URL', 2)]) if '서비스URL' in column_dict else (str(row.iloc[2]) if len(row) > 2 else "")
+        content = clean_text(row.iloc[column_dict.get('서비스내용', 3)]) if '서비스내용' in column_dict else (clean_text(row.iloc[3]) if len(row) > 3 else "")
+        summary_col = clean_text(row.iloc[column_dict.get('서비스요약', -1)]) if '서비스요약' in column_dict else None
+        organization = clean_text(row.iloc[column_dict.get('서비스기관', 4)]) if '서비스기관' in column_dict else (clean_text(row.iloc[4]) if len(row) > 4 else "")
+        contact = clean_text(row.iloc[column_dict.get('연락처', 5)]) if '연락처' in column_dict else (clean_text(row.iloc[5]) if len(row) > 5 else "")
+        department = clean_text(row.iloc[column_dict.get('담당부서', 6)]) if '담당부서' in column_dict else (clean_text(row.iloc[6]) if len(row) > 6 else "")
+        target = clean_text(row.iloc[column_dict.get('서비스대상', 7)]) if '서비스대상' in column_dict else (clean_text(row.iloc[7]) if len(row) > 7 else "")
+        year = str(row.iloc[column_dict.get('기준년도', 8)]) if '기준년도' in column_dict else (str(row.iloc[8]) if len(row) > 8 else "")
+        date = str(row.iloc[column_dict.get('기준일자', 9)]) if '기준일자' in column_dict else (str(row.iloc[9]) if len(row) > 9 else "")
+    else:
+        # 기본 인덱스 기반 접근
+        service_id = str(row.iloc[0]) if len(row) > 0 else ""
+        title = clean_text(row.iloc[1]) if len(row) > 1 else ""
+        url = str(row.iloc[2]) if len(row) > 2 else ""
+        content = clean_text(row.iloc[3]) if len(row) > 3 else ""
+        summary_col = None
+        organization = clean_text(row.iloc[4]) if len(row) > 4 else ""
+        contact = clean_text(row.iloc[5]) if len(row) > 5 else ""
+        department = clean_text(row.iloc[6]) if len(row) > 6 else ""
+        target = clean_text(row.iloc[7]) if len(row) > 7 else ""
+        year = str(row.iloc[8]) if len(row) > 8 else ""
+        date = str(row.iloc[9]) if len(row) > 9 else ""
     
     # full_text 구성
     full_text_parts = []
@@ -162,6 +201,26 @@ def process_csv_row(row: pd.Series) -> Dict:
     
     full_text = "\n".join(full_text_parts)
     
+    # summary 설정: 서비스요약 컬럼이 있으면 사용
+    # 없으면 웹 크롤링 + LLM 요약 시도 (RAG 기술 활용)
+    summary = None
+    if summary_col and summary_col.strip():
+        summary = summary_col.strip()
+    elif url and url.strip():
+        # summary가 없고 URL이 있으면 웹 크롤링 + 요약 시도
+        try:
+            from app.services.web_scraper import scrape_and_summarize
+            logger.info(f"웹 크롤링으로 summary 생성 시도: {url}")
+            summary = scrape_and_summarize(url.strip(), title=title)
+            if summary:
+                logger.info(f"웹 크롤링으로 summary 생성 성공: {title[:50]}...")
+            else:
+                logger.warning(f"웹 크롤링으로 summary 생성 실패: {url}")
+        except Exception as e:
+            logger.warning(f"웹 크롤링 중 오류 발생 (계속 진행): {url}, 오류: {e}")
+            # 크롤링 실패해도 계속 진행 (나중에 full_text에서 추출 가능)
+            summary = None
+    
     # 지역 추출
     region = extract_region(full_text)
     
@@ -174,11 +233,21 @@ def process_csv_row(row: pd.Series) -> Dict:
     # 날짜 파싱
     apply_date = parse_date(date)
     
+    # 사이트 URL 추출: 서비스기관 컬럼에서 URL 추출 (서비스URL보다 우선)
+    site_url = extract_site_url(organization)
+    
+    # source_link 결정: 사이트 URL이 있으면 우선 사용, 없으면 서비스URL 사용
+    final_source_link = None
+    if site_url and site_url.startswith('http'):
+        final_source_link = site_url
+    elif url and url.startswith('http'):
+        final_source_link = url
+    
     return {
         'title': title,
-        'summary': None,  # 나중에 LLM으로 생성
+        'summary': summary,  # 서비스요약 컬럼이 있으면 사용
         'full_text': full_text,
-        'source_link': url if url and url.startswith('http') else None,
+        'source_link': final_source_link,  # 사이트 URL 우선, 없으면 서비스URL
         'region': region,
         'age_min': age_min,
         'age_max': age_max,
@@ -265,7 +334,7 @@ def process_csv_to_db(csv_path: str, db: Session, batch_size: int = 100):
     for idx, row in df.iterrows():
         try:
             service_id = str(row.iloc[0]) if len(row) > 0 else None
-            welfare_data = process_csv_row(row)
+            welfare_data = process_csv_row(row, df_columns=df.columns.tolist())
             
             # 기존 데이터 확인
             existing = None

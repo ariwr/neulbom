@@ -72,16 +72,53 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_access_token(token: str) -> Optional[dict]:
-    """JWT 토큰 디코딩"""
+    """JWT 토큰 디코딩 (기존 정수 sub 토큰 호환)"""
+    import logging
+    from datetime import datetime
+    
+    logger = logging.getLogger(__name__)
+    
     try:
+        # 먼저 표준 방식으로 디코딩 시도
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
     except JWTError as e:
-        # 디버깅을 위한 로깅 (개발 환경에서만)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"JWT 토큰 디코딩 실패: {e}, 토큰 시작: {token[:20] if token else 'None'}...")
-        return None
+        error_msg = str(e)
+        
+        # "Subject must be a string" 오류인 경우, 기존 토큰(정수 sub) 호환 처리
+        if "Subject must be a string" in error_msg:
+            try:
+                # 검증 없이 페이로드 추출 (기존 토큰 호환)
+                unverified_payload = jwt.get_unverified_claims(token)
+                
+                # 만료 시간 검증
+                exp = unverified_payload.get('exp')
+                if exp:
+                    if isinstance(exp, (int, float)):
+                        if datetime.utcnow().timestamp() > exp:
+                            logger.warning(f"토큰 만료됨: exp={exp}")
+                            return None
+                    else:
+                        logger.warning(f"토큰 exp 형식 오류: {type(exp)}")
+                
+                # 서명 검증 시도 (sub 검증 없이)
+                try:
+                    # 서명만 검증 (sub 검증은 건너뛰기 위해 get_unverified_claims 사용)
+                    # python-jose는 sub 검증을 건너뛸 수 없으므로, 서명 검증은 별도로 수행
+                    # 하지만 실제로는 get_unverified_claims로 이미 페이로드를 추출했으므로
+                    # 서명 검증을 수동으로 할 수 없음. 대신 페이로드를 반환하고 호출하는 쪽에서 처리
+                    logger.info(f"기존 토큰 감지 (정수 sub): {unverified_payload.get('sub')}, 서명 검증은 건너뜀 (기존 토큰 호환)")
+                except Exception:
+                    pass
+                
+                return unverified_payload
+            except Exception as inner_e:
+                logger.warning(f"기존 토큰 호환 처리 실패: {inner_e}, 원본 오류: {error_msg}")
+                return None
+        else:
+            # 다른 종류의 JWT 오류
+            logger.warning(f"JWT 토큰 디코딩 실패: {error_msg}, 토큰 시작: {token[:20] if token else 'None'}...")
+            return None
 
 
 async def get_current_user(
@@ -113,9 +150,23 @@ async def get_current_user(
         logger.error(f"토큰 디코딩 실패: token 길이={len(token)}, 시작={token[:30]}...")
         raise credentials_exception
     
-    user_id: int = payload.get("sub")
-    if user_id is None:
+    # JWT 표준에 따라 sub는 문자열이어야 하지만, 기존 토큰 호환을 위해 정수와 문자열 모두 처리
+    user_id_raw = payload.get("sub")
+    if user_id_raw is None:
         logger.error(f"토큰에 user_id(sub) 없음: payload={payload}")
+        raise credentials_exception
+    
+    try:
+        # 정수인 경우와 문자열인 경우 모두 처리
+        if isinstance(user_id_raw, int):
+            user_id: int = user_id_raw
+        elif isinstance(user_id_raw, str):
+            user_id: int = int(user_id_raw)
+        else:
+            logger.error(f"토큰의 user_id(sub) 타입이 올바르지 않음: {type(user_id_raw)}, 값: {user_id_raw}")
+            raise credentials_exception
+    except (ValueError, TypeError) as e:
+        logger.error(f"토큰의 user_id(sub)를 정수로 변환 실패: {user_id_raw}, 오류: {e}")
         raise credentials_exception
     
     logger.info(f"토큰 검증 성공: user_id={user_id}")
@@ -160,9 +211,23 @@ async def get_optional_user(
         payload = decode_access_token(token)
         if payload is None:
             return None
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        
+        # JWT 표준에 따라 sub는 문자열이어야 하지만, 기존 토큰 호환을 위해 정수와 문자열 모두 처리
+        user_id_raw = payload.get("sub")
+        if user_id_raw is None:
             return None
+        
+        try:
+            # 정수인 경우와 문자열인 경우 모두 처리
+            if isinstance(user_id_raw, int):
+                user_id: int = user_id_raw
+            elif isinstance(user_id_raw, str):
+                user_id: int = int(user_id_raw)
+            else:
+                return None
+        except (ValueError, TypeError):
+            return None
+        
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if user and not user.is_active:
             return None

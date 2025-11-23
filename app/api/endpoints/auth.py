@@ -107,10 +107,10 @@ def signup(user_data: schema.UserSignup, db: Session = Depends(get_db)):
                 detail=error_message
             )
         
-        # 토큰 생성
+        # 토큰 생성 (JWT 표준에 따라 sub는 문자열이어야 함)
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": user.id},
+            data={"sub": str(user.id)},  # user.id를 문자열로 변환
             expires_delta=access_token_expires
         )
         
@@ -153,7 +153,7 @@ def login(user_data: schema.UserLogin, db: Session = Depends(get_db)):
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id},
+        data={"sub": str(user.id)},  # user.id를 문자열로 변환 (JWT 표준 준수)
         expires_delta=access_token_expires
     )
     

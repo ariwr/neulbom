@@ -1,6 +1,8 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from typing import Optional, List
 from datetime import datetime, date
+import re
+import html
 
 
 # Auth Schemas
@@ -58,6 +60,56 @@ class ChatResponse(BaseModel):
 
 
 # Welfare Schemas
+def clean_welfare_summary(summary: Optional[str], full_text: Optional[str] = None) -> Optional[str]:
+    """summary를 정제하고, 없거나 잘못된 경우 full_text에서 추출"""
+    # summary가 있고 유효한 경우
+    if summary and summary.strip():
+        cleaned = summary.strip()
+        # HTML 엔티티 디코딩 (예: &middot; → ·, &nbsp; → 공백)
+        cleaned = html.unescape(cleaned)
+        # 챗봇 대화체나 "?" 같은 잘못된 내용 제거
+        invalid_patterns = [
+            r'^\?+$',  # "?"만 있는 경우
+            r'^지금\s*힘든\s*상황',  # 챗봇 대화 시작
+            r'말씀해주셔서\s*감사해요',
+            r'무엇을\s*도와드릴까요',
+            r'어떻게\s*도와드릴까요',
+            r'그런\s*감정을\s*느끼는\s*것은\s*당연해요',  # 챗봇 대화
+        ]
+        
+        is_invalid = False
+        for pattern in invalid_patterns:
+            if re.search(pattern, cleaned, re.IGNORECASE):
+                # 잘못된 summary이므로 full_text에서 추출
+                is_invalid = True
+                break
+        
+        if not is_invalid:
+            # 유효한 summary
+            return cleaned
+    
+    # summary가 없거나 잘못된 경우 full_text에서 추출
+    if full_text and full_text.strip():
+        # HTML 엔티티 디코딩
+        full_text = html.unescape(full_text)
+        # full_text에서 "내용:" 부분 추출
+        content_match = re.search(r'내용:\s*(.+?)(?:\n제목:|\n대상:|\n기관:|\n연락처:|$)', full_text, re.DOTALL)
+        if content_match:
+            content = content_match.group(1).strip()
+            # 200자로 제한
+            if len(content) > 200:
+                content = content[:200] + "..."
+            return content
+        else:
+            # "내용:"이 없으면 전체 텍스트에서 처음 200자 사용
+            text = full_text.replace('\n', ' ').strip()
+            if len(text) > 200:
+                text = text[:200] + "..."
+            return text
+    
+    return None
+
+
 class WelfareItem(BaseModel):
     id: int
     title: str

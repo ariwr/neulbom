@@ -109,7 +109,8 @@ class Post(Base):
     content = Column(Text, nullable=False)
     
     # 카테고리 (정보공유/고민상담/자유)
-    category = Column(SQLEnum(PostCategory), nullable=False, default=PostCategory.FREE, index=True)
+    # SQLite 호환: native_enum=False로 설정하여 VARCHAR로 저장
+    category = Column(SQLEnum(PostCategory, native_enum=False), nullable=False, default=PostCategory.FREE, index=True)
     
     # 조회수 및 좋아요 수
     view_count = Column(Integer, default=0, nullable=False)

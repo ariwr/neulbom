@@ -13,9 +13,7 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
-# Upstage API 설정
-UPSTAGE_API_URL = "https://api.upstage.ai/v1/chat/completions"
-UPSTAGE_EMBEDDING_API_URL = "https://api.upstage.ai/v1/embeddings"
+# Upstage API 설정은 config.py에서 가져옴
 
 
 class LLMClient:
@@ -166,7 +164,7 @@ class LLMClient:
             }
             
             response = requests.post(
-                UPSTAGE_API_URL,
+                settings.UPSTAGE_API_URL,
                 headers=headers,
                 json=data,
                 timeout=30
@@ -341,7 +339,7 @@ class LLMClient:
             }
             
             response = requests.post(
-                UPSTAGE_EMBEDDING_API_URL,
+                settings.UPSTAGE_EMBEDDING_API_URL,
                 headers=headers,
                 json=data,
                 timeout=30
