@@ -31,10 +31,10 @@ export function Navbar({ activePage = 'home', onNavigate }: NavbarProps) {
           <div className="flex-shrink-0">
             <button
               onClick={() => onNavigate('home')}
-              className="px-6 py-2 rounded-full flex items-center space-x-2 hover:opacity-80 transition-all"
+              className="px-6 py-2 rounded-full flex items-center space-x-1 hover:opacity-80 transition-all"
               style={{ backgroundColor: colors.mainGreen1 }}
             >
-              <span className="text-white">🌿</span>
+              <span className="text-white">🍀</span>
               <span className="text-white">늘봄</span>
             </button>
           </div>
