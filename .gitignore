@@ -51,3 +51,20 @@ test_*.py
 *_test.py
 scripts/test_*.py
 
+# Node modules
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Dependency files
+yarn-error.log
+pnpm-debug.log
+npm-debug.log
+
+# Local config
+*.local
+
+# TypeScript
+*.tsbuildinfo
