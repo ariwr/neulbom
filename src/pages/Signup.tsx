@@ -48,48 +48,6 @@ export function Signup({ onNavigate }: SignupProps) {
           </p>
         </div>
 
-        {/* User Level Info */}
-        <Card variant="elevated" padding="md" className="mb-6">
-          <h3 className="text-base mb-4" style={{ color: colors.textDark }}>
-            사용자 등급 안내
-          </h3>
-          <div className="space-y-3">
-            <div className="flex items-start space-x-3">
-              <Badge variant="level1" size="sm">Level 1</Badge>
-              <div className="flex-1">
-                <p className="text-sm" style={{ color: colors.textDark }}>
-                  기본 회원
-                </p>
-                <p className="text-xs mt-1" style={{ color: colors.textSub }}>
-                  챗봇, 복지 검색 이용 가능
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-3">
-              <Badge variant="level2" size="sm">Level 2</Badge>
-              <div className="flex-1">
-                <p className="text-sm" style={{ color: colors.textDark }}>
-                  인증 회원
-                </p>
-                <p className="text-xs mt-1" style={{ color: colors.textSub }}>
-                  커뮤니티 읽기 권한 추가
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-3">
-              <Badge variant="level3" size="sm">Level 3</Badge>
-              <div className="flex-1">
-                <p className="text-sm" style={{ color: colors.textDark }}>
-                  완전 인증 회원
-                </p>
-                <p className="text-xs mt-1" style={{ color: colors.textSub }}>
-                  커뮤니티 글쓰기 권한 포함
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
         {/* Signup Form */}
         <Card variant="elevated" padding="lg">
           <div className="space-y-4">
