@@ -12,9 +12,11 @@ interface PostDetailProps {
   post: Post | null;
   onNavigate: (page: Page) => void;
   onAddComment: (postId: number, content: string) => void;
+  onToggleLike?: (postId: number) => void;
+  onToggleBookmark?: (postId: number) => void;
 }
 
-export function PostDetail({ post, onNavigate, onAddComment }: PostDetailProps) {
+export function PostDetail({ post, onNavigate, onAddComment, onToggleLike, onToggleBookmark }: PostDetailProps) {
   const [comment, setComment] = useState('');
 
   // post가 없을 시
@@ -83,25 +85,75 @@ export function PostDetail({ post, onNavigate, onAddComment }: PostDetailProps) 
         <Card variant="elevated" padding="lg" className="mb-6">
           <div className="space-y-4">
             {/* Meta */}
-            <div className="flex items-center justify-between pb-4 border-b" style={{ borderColor: colors.lightGray }}>
+            <div
+              className="flex items-center justify-between pb-4 border-b"
+              style={{ borderColor: colors.lightGray }}
+            >
+              {/* Left: 익명 사용자 */}
               <div className="flex items-center space-x-3">
-                <div 
+                <div
                   className="w-10 h-10 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: colors.lightGray }}
                 >
-                  <span className="text-sm" style={{ color: colors.textSub }}>익명</span>
+                  <span className="text-sm" style={{ color: colors.textSub }}>
+                    익명
+                  </span>
                 </div>
                 <div>
-                  <p className="text-sm" style={{ color: colors.textDark }}>익명 사용자</p>
-                  <p className="text-xs" style={{ color: colors.textSub }}>{post.date}</p>
+                  <p className="text-sm" style={{ color: colors.textDark }}>
+                    익명 사용자
+                  </p>
+                  <p className="text-xs" style={{ color: colors.textSub }}>
+                    {post.date}
+                  </p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {post.tags.map((tag) => (
-                  <Badge key={tag} variant="default" size="sm">
-                    #{tag}
-                  </Badge>
-                ))}
+
+              {/* Right: 좋아요/북마크 */}
+              <div className="flex items-center space-x-4">
+                {/* 좋아요 */}
+                <button
+                  onClick={() => onToggleLike?.(post.id)}
+                  className="flex items-center space-x-1 hover:opacity-70 transition"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill={post.isLiked ? colors.pointPink : "none"}
+                    stroke={post.isLiked ? colors.pointPink : colors.textSub}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                  </svg>
+                  <span
+                    className="text-sm"
+                    style={{ color: post.isLiked ? colors.pointPink : colors.textSub }}
+                  >
+                    {post.likeCount}
+                  </span>
+                </button>
+
+                {/* 북마크 */}
+                <button
+                  onClick={() => onToggleBookmark?.(post.id)}
+                  className="hover:opacity-70 transition"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill={post.isBookmarked ? colors.mainGreen2 : "none"}
+                    stroke={post.isBookmarked ? colors.mainGreen2 : colors.textSub}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                </button>
               </div>
             </div>
 
