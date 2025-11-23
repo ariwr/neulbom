@@ -22,6 +22,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     
     # 프로필 정보
+    name = Column(String, nullable=True)  # 이름
     age = Column(Integer, nullable=True)
     region = Column(String, nullable=True)  # 거주 지역
     care_target = Column(String, nullable=True)  # 돌봄 대상 (예: "청소년", "노인", "장애인")
@@ -196,7 +197,21 @@ class ChatRoom(Base):
     
     # 관계
     user = relationship("User", back_populates="chat_rooms")
-    # TODO: ChatLog 모델과의 관계 추가 (필요시)
+    logs = relationship("ChatLog", back_populates="room", cascade="all, delete-orphan")
+
+
+class ChatLog(Base):
+    """채팅 기록 모델"""
+    __tablename__ = "chat_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("chat_rooms.id"), nullable=False)
+    is_user = Column(Boolean, nullable=False)  # True: 사용자 메시지, False: 봇 메시지
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    
+    # 관계
+    room = relationship("ChatRoom", back_populates="logs")
 
 
 class WelfareViewLog(Base):

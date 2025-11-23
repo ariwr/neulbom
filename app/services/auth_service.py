@@ -76,7 +76,11 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
+    except JWTError as e:
+        # 디버깅을 위한 로깅 (개발 환경에서만)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"JWT 토큰 디코딩 실패: {e}, 토큰 시작: {token[:20] if token else 'None'}...")
         return None
 
 
@@ -85,22 +89,40 @@ async def get_current_user(
     db: Session = Depends(get_db)
 ) -> models.User:
     """현재 로그인한 사용자 가져오기"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # 토큰 디버깅
+    if not token:
+        logger.error("토큰이 없습니다.")
+        raise credentials_exception
+    
+    logger.info(f"토큰 수신: 길이={len(token)}, 시작={token[:30]}...")
+    
+    # 토큰 앞뒤 공백 제거
+    token = token.strip()
+    
     payload = decode_access_token(token)
     if payload is None:
+        logger.error(f"토큰 디코딩 실패: token 길이={len(token)}, 시작={token[:30]}...")
         raise credentials_exception
     
     user_id: int = payload.get("sub")
     if user_id is None:
+        logger.error(f"토큰에 user_id(sub) 없음: payload={payload}")
         raise credentials_exception
+    
+    logger.info(f"토큰 검증 성공: user_id={user_id}")
     
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
+        logger.error(f"사용자를 찾을 수 없음: user_id={user_id}")
         raise credentials_exception
     
     return user

@@ -5,7 +5,10 @@ import logging
 
 from app.models.connection import get_db
 from app.models import models, schema, crud
-from app.models.crud import toggle_post_like, toggle_post_bookmark
+from app.models.crud import (
+    toggle_post_like, toggle_post_bookmark,
+    get_user_liked_post_ids, get_user_bookmarked_post_ids
+)
 from app.services.auth_service import get_current_active_user, require_level
 from app.services.community_service import create_post_with_ai_check, get_posts_list, get_post_detail
 from app.services.verification_service import verify_with_ai
@@ -108,12 +111,12 @@ def submit_verification(
 @router.post("/posts", response_model=schema.PostResponse)
 def create_post(
     post_data: schema.PostCreate,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> schema.PostResponse:
     """
     게시글 작성 (AI 필터링 적용)
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 고위험 게시글은 자동 차단
     """
     # 입력 검증
@@ -168,12 +171,12 @@ def get_posts(
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None, description="카테고리 필터 (information/worry/free)"),
     sort: str = Query("latest", description="정렬 방식 (latest/popular)"),
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> List[schema.PostResponse]:
     """
     게시글 목록 조회
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - category: 전체/정보공유/고민상담/자유 필터링
     - sort: latest(최신순) vs popular(좋아요순) 정렬
     """
@@ -184,7 +187,30 @@ def get_posts(
         
         posts = get_posts_list(db, skip=skip, limit=limit, category=category, sort=sort)
         logger.debug(f"게시글 목록 조회: user_id={current_user.id}, skip={skip}, limit={limit}, category={category}, sort={sort}, count={len(posts)}")
-        return create_posts_response(posts, current_user.id, db)
+        
+        # N+1 문제 해결: Bulk 조회로 좋아요/북마크 상태 한 번에 가져오기
+        post_ids = [post.id for post in posts]
+        liked_ids = get_user_liked_post_ids(db, current_user.id, post_ids)
+        bookmarked_ids = get_user_bookmarked_post_ids(db, current_user.id, post_ids)
+        
+        # 메모리 상에서 PostResponse 생성
+        result = []
+        for post in posts:
+            result.append(schema.PostResponse(
+                id=post.id,
+                title=post.title,
+                content=post.content,
+                category=post.category.value if hasattr(post.category, 'value') else str(post.category),
+                view_count=post.view_count or 0,
+                like_count=post.like_count or 0,
+                anonymous_id=post.anonymous_id,
+                created_at=post.created_at,
+                comment_count=len(post.comments) if hasattr(post, 'comments') else 0,
+                is_liked=post.id in liked_ids,
+                is_bookmarked=post.id in bookmarked_ids
+            ))
+        
+        return result
     except Exception as e:
         logger.error(f"게시글 목록 조회 중 오류 발생: user_id={current_user.id}, error={e}", exc_info=True)
         raise HTTPException(
@@ -196,12 +222,12 @@ def get_posts(
 @router.get("/posts/{post_id}", response_model=schema.PostResponse)
 def get_post(
     post_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> schema.PostResponse:
     """
     게시글 상세 조회
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     """
     try:
         post = get_post_detail(db, post_id)
@@ -233,12 +259,12 @@ def get_post(
 def update_post(
     post_id: int,
     post_data: schema.PostCreate,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> schema.PostResponse:
     """
     게시글 수정
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 본인이 작성한 게시글만 수정 가능
     """
     # 입력 검증
@@ -270,12 +296,12 @@ def update_post(
 @router.delete("/posts/{post_id}")
 def delete_post(
     post_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> Dict[str, str]:
     """
     게시글 삭제
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 본인이 작성한 게시글만 삭제 가능
     """
     try:
@@ -304,12 +330,12 @@ def delete_post(
 def create_comment(
     post_id: int,
     comment_data: schema.CommentCreate,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> schema.CommentResponse:
     """
     댓글 작성
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     """
     # 입력 검증
     validate_comment_content(comment_data.content)
@@ -353,12 +379,12 @@ def create_comment(
 @router.get("/posts/{post_id}/comments", response_model=List[schema.CommentResponse])
 def get_comments(
     post_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> List[schema.CommentResponse]:
     """
     댓글 목록 조회
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     """
     try:
         # 게시글 존재 확인
@@ -387,12 +413,12 @@ def get_comments(
 def update_comment(
     comment_id: int,
     comment_data: schema.CommentCreate,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> schema.CommentResponse:
     """
     댓글 수정
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 본인이 작성한 댓글만 수정 가능
     """
     # 입력 검증
@@ -423,12 +449,12 @@ def update_comment(
 @router.delete("/comments/{comment_id}")
 def delete_comment(
     comment_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ) -> Dict[str, str]:
     """
     댓글 삭제
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 본인이 작성한 댓글만 삭제 가능
     """
     try:
@@ -456,12 +482,12 @@ def delete_comment(
 @router.post("/posts/{post_id}/like")
 def toggle_like(
     post_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ):
     """
     게시글 좋아요 토글
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 이미 좋아요를 눌렀으면 취소, 아니면 추가
     """
     try:
@@ -486,12 +512,12 @@ def toggle_like(
 @router.post("/posts/{post_id}/bookmark")
 def toggle_bookmark(
     post_id: int,
-    current_user: models.User = Depends(require_level(3)),  # Level 3 이상 필요
+    current_user: models.User = Depends(require_level(2)),  # Level 2 이상 필요
     db: Session = Depends(get_db)
 ):
     """
     게시글 북마크 토글
-    - Level 3 (검증 회원) 이상 접근 가능
+    - Level 2 (일반 회원) 이상 접근 가능
     - 이미 북마크했으면 삭제, 아니면 추가
     """
     try:

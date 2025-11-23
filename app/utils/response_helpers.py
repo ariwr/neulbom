@@ -5,7 +5,6 @@
 
 from typing import List, Optional
 from app.models import models, schema
-from app.models.crud import check_post_liked, check_post_bookmarked
 
 
 def create_post_response(post: models.Post, user_id: Optional[int] = None, db=None) -> schema.PostResponse:
@@ -24,6 +23,8 @@ def create_post_response(post: models.Post, user_id: Optional[int] = None, db=No
     is_bookmarked = False
     
     if user_id and db:
+        # 순환 import 방지를 위해 함수 내부에서 import
+        from app.models.crud import check_post_liked, check_post_bookmarked
         is_liked = check_post_liked(db, user_id, post.id)
         is_bookmarked = check_post_bookmarked(db, user_id, post.id)
     

@@ -28,7 +28,15 @@ def signup(user_data: schema.UserSignup, db: Session = Depends(get_db)):
     회원가입 (Level 2 부여)
     - 이메일 중복 체크 및 트랜잭션 관리
     - 비밀번호 유효성 검증
+    - 비밀번호 확인 검증
     """
+    # 비밀번호 확인 검증
+    if user_data.password != user_data.password_confirm:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="비밀번호와 비밀번호 확인이 일치하지 않습니다."
+        )
+    
     # 비밀번호 유효성 검증
     password_length = len(user_data.password)
     if password_length < 8:
@@ -58,6 +66,14 @@ def signup(user_data: schema.UserSignup, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="비밀번호는 영어, 숫자, 특수문자의 조합으로만 가능합니다."
+        )
+    
+    # 특수문자 포함 여부 확인
+    special_char_pattern = re.compile(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?]')
+    if not special_char_pattern.search(user_data.password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="비밀번호에 특수문자가 포함되어야 합니다."
         )
     
     try:
@@ -105,7 +121,8 @@ def signup(user_data: schema.UserSignup, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         # 예상치 못한 예외 처리
-        logger.error(f"회원가입 중 예상치 못한 오류 발생: {e}", exc_info=True)
+        error_detail = str(e)
+        logger.error(f"회원가입 중 예상치 못한 오류 발생: {error_detail}", exc_info=True)
         # DB 롤백 보장
         try:
             db.rollback()
@@ -113,7 +130,7 @@ def signup(user_data: schema.UserSignup, db: Session = Depends(get_db)):
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="회원가입 처리 중 오류가 발생했습니다."
+            detail=f"회원가입 처리 중 오류가 발생했습니다: {error_detail}"
         )
 
 

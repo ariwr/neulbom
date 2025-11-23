@@ -26,14 +26,27 @@ class LLMClient:
         self.upstage_api_key = settings.UPSTAGE_API_KEY
         self.default_provider = settings.DEFAULT_LLM_PROVIDER
         
+        # API Key 검증 및 로깅
+        if self.gemini_api_key:
+            logger.info(f"Gemini API 키 설정됨: {self.gemini_api_key[:10]}...")
+        else:
+            logger.warning("Gemini API 키가 설정되지 않았습니다. Gemini 기능을 사용할 수 없습니다.")
+        
+        if self.upstage_api_key:
+            logger.info(f"Upstage API 키 설정됨: {self.upstage_api_key[:10]}...")
+        else:
+            logger.warning("Upstage API 키가 설정되지 않았습니다. Upstage 기능을 사용할 수 없습니다.")
+        
+        logger.info(f"기본 LLM Provider: {self.default_provider}")
+        
         # Gemini 초기화
         if GEMINI_AVAILABLE and self.gemini_api_key:
             try:
                 genai.configure(api_key=self.gemini_api_key)
-                # 최신 Gemini 모델 사용 (gemini-1.5-flash는 빠르고 무료, gemini-1.5-pro는 더 강력)
-                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                # 모델명 수정: 안정적인 gemini-pro 사용
+                self.gemini_model = genai.GenerativeModel('gemini-pro')
             except Exception as e:
-                print(f"Gemini 초기화 실패: {e}")
+                logger.warning(f"Gemini 초기화 실패: {e}")
                 self.gemini_model = None
         else:
             self.gemini_model = None
@@ -50,6 +63,7 @@ class LLMClient:
         - provider: "gemini" 또는 "upstage" (None이면 기본값 사용)
         """
         provider = provider or self.default_provider
+        logger.info(f"LLM 응답 생성 시작: provider={provider}, message_length={len(message)}, history_count={len(history)}")
         
         if provider == "gemini":
             return self._generate_with_gemini(message, history, system_prompt)
@@ -66,29 +80,45 @@ class LLMClient:
     ) -> str:
         """Gemini API를 사용한 응답 생성"""
         if not self.gemini_model:
+            logger.warning("Gemini 모델이 초기화되지 않았습니다.")
             return self._fallback_response(message)
         
         try:
-            # Gemini는 system prompt를 첫 메시지에 포함
-            full_prompt = f"{system_prompt}\n\n"
+            # 시스템 프롬프트와 히스토리를 포함한 전체 프롬프트 구성
+            full_prompt_parts = [system_prompt]
             
             # 히스토리 추가
             for h in history:
                 role = h.get("role", "user")
                 content = h.get("content", "")
                 if role == "user":
-                    full_prompt += f"사용자: {content}\n"
+                    full_prompt_parts.append(f"사용자: {content}")
                 elif role == "assistant":
-                    full_prompt += f"늘봄: {content}\n"
+                    full_prompt_parts.append(f"늘봄: {content}")
             
             # 현재 메시지 추가
-            full_prompt += f"사용자: {message}\n늘봄:"
+            full_prompt_parts.append(f"사용자: {message}")
+            full_prompt_parts.append("늘봄:")
             
-            # API 호출
-            response = self.gemini_model.generate_content(full_prompt)
-            return response.text.strip()
+            full_prompt = "\n\n".join(full_prompt_parts)
+            
+            # API 호출 (temperature 등 파라미터는 모델 생성 시 설정)
+            response = self.gemini_model.generate_content(
+                full_prompt,
+                generation_config={
+                    "temperature": 0.8,  # 더 다양한 응답
+                    "top_p": 0.9,
+                    "top_k": 40,
+                    "max_output_tokens": 1000,
+                }
+            )
+            
+            reply = response.text.strip()
+            logger.debug(f"Gemini 응답 생성 성공: {len(reply)}자")
+            return reply
+            
         except Exception as e:
-            print(f"Gemini API 오류: {e}")
+            logger.error(f"Gemini API 오류: {e}", exc_info=True)
             return self._fallback_response(message)
     
     def _generate_with_upstage(
@@ -99,21 +129,25 @@ class LLMClient:
     ) -> str:
         """Upstage API를 사용한 응답 생성"""
         if not self.upstage_api_key:
+            logger.warning("Upstage API 키가 설정되지 않았습니다.")
             return self._fallback_response(message)
         
         try:
             # 메시지 포맷 변환
             messages = [{"role": "system", "content": system_prompt}]
             
-            # 히스토리 추가
-            for h in history:
+            # 히스토리 추가 (최근 20개만 사용하여 토큰 제한 고려)
+            recent_history = history[-20:] if len(history) > 20 else history
+            for h in recent_history:
                 role = h.get("role", "user")
                 content = h.get("content", "")
-                if role in ["user", "assistant"]:
+                if role in ["user", "assistant"] and content.strip():
                     messages.append({"role": role, "content": content})
             
             # 현재 메시지 추가
             messages.append({"role": "user", "content": message})
+            
+            logger.debug(f"Upstage API 호출: 히스토리 {len(recent_history)}개, 총 메시지 {len(messages)}개")
             
             # API 호출
             headers = {
@@ -124,8 +158,11 @@ class LLMClient:
             data = {
                 "model": "solar-1-mini-chat",  # Upstage 모델명
                 "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": 1000
+                "temperature": 0.8,  # 더 다양한 응답을 위해 temperature 증가
+                "max_tokens": 1000,
+                "top_p": 0.9,  # 다양성 증가
+                "frequency_penalty": 0.3,  # 반복 방지
+                "presence_penalty": 0.3  # 주제 다양성 증가
             }
             
             response = requests.post(
@@ -137,12 +174,20 @@ class LLMClient:
             
             if response.status_code == 200:
                 result = response.json()
-                return result["choices"][0]["message"]["content"].strip()
+                if "choices" in result and len(result["choices"]) > 0:
+                    reply = result["choices"][0]["message"]["content"].strip()
+                    logger.info(f"Upstage API 응답 성공: {len(reply)}자, 응답 시작: {reply[:50]}...")
+                    return reply
+                else:
+                    logger.error(f"Upstage API 응답 형식 오류: {result}")
+                    return self._fallback_response(message)
             else:
-                print(f"Upstage API 오류: {response.status_code} - {response.text}")
+                error_text = response.text[:500] if hasattr(response, 'text') else str(response)
+                logger.error(f"Upstage API 오류: {response.status_code} - {error_text}")
+                logger.error(f"요청 데이터: model={data.get('model')}, messages_count={len(data.get('messages', []))}")
                 return self._fallback_response(message)
         except Exception as e:
-            print(f"Upstage API 오류: {e}")
+            logger.error(f"Upstage API 오류: {e}", exc_info=True)
             return self._fallback_response(message)
     
     def summarize_text(
@@ -245,10 +290,12 @@ class LLMClient:
             text: 임베딩할 텍스트
         """
         if not GEMINI_AVAILABLE:
-            raise ValueError("google.generativeai 패키지가 설치되지 않았습니다.")
+            logger.warning("google.generativeai 패키지가 설치되지 않았습니다. 더미 임베딩을 반환합니다.")
+            return [0.0] * settings.EMBEDDING_DIMENSION
         
         if not self.gemini_api_key:
-            raise ValueError("Gemini API 키가 설정되지 않았습니다.")
+            logger.warning("Gemini API 키가 설정되지 않았습니다. 더미 임베딩을 반환합니다.")
+            return [0.0] * settings.EMBEDDING_DIMENSION
         
         try:
             # Gemini 임베딩 API 호출
@@ -261,10 +308,11 @@ class LLMClient:
             if result and "embedding" in result:
                 return result["embedding"]
             else:
-                raise ValueError(f"Gemini API 응답 형식을 파싱할 수 없습니다: {result}")
+                logger.warning(f"Gemini API 응답 형식을 파싱할 수 없습니다: {result}. 더미 임베딩을 반환합니다.")
+                return [0.0] * settings.EMBEDDING_DIMENSION
         except Exception as e:
-            print(f"Gemini Embedding API 오류: {e}")
-            raise
+            logger.warning(f"Gemini Embedding API 오류: {e}. 더미 임베딩을 반환합니다.")
+            return [0.0] * settings.EMBEDDING_DIMENSION
     
     def _get_embedding_direct(self, text: str, is_query: bool = False) -> List[float]:
         """
@@ -275,7 +323,8 @@ class LLMClient:
             is_query: True이면 쿼리 모델 사용, False이면 문서 모델 사용
         """
         if not self.upstage_api_key:
-            raise ValueError("Upstage API 키가 설정되지 않았습니다.")
+            logger.warning("Upstage API 키가 설정되지 않았습니다. 더미 임베딩을 반환합니다.")
+            return [0.0] * settings.EMBEDDING_DIMENSION
         
         # 모델 선택: 쿼리면 query 모델, 문서면 passage 모델
         model = settings.EMBEDDING_QUERY_MODEL if is_query else settings.EMBEDDING_MODEL
@@ -313,12 +362,14 @@ class LLMClient:
                 elif isinstance(result, list) and len(result) > 0:
                     if "embedding" in result[0]:
                         return result[0]["embedding"]
-                raise ValueError(f"Upstage API 응답 형식을 파싱할 수 없습니다: {result}")
+                logger.warning(f"Upstage API 응답 형식을 파싱할 수 없습니다: {result}. 더미 임베딩을 반환합니다.")
+                return [0.0] * settings.EMBEDDING_DIMENSION
             else:
-                raise ValueError(f"Upstage API 오류: {response.status_code} - {response.text}")
+                logger.warning(f"Upstage API 오류: {response.status_code} - {response.text[:200]}. 더미 임베딩을 반환합니다.")
+                return [0.0] * settings.EMBEDDING_DIMENSION
         except Exception as e:
-            print(f"Upstage Embedding API 오류: {e}")
-            raise
+            logger.warning(f"Upstage Embedding API 오류: {e}. 더미 임베딩을 반환합니다.")
+            return [0.0] * settings.EMBEDDING_DIMENSION
     
     def _fallback_response(self, message: str) -> str:
         """API 실패 시 기본 응답"""

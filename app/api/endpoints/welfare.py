@@ -7,7 +7,7 @@ from app.models.connection import get_db
 from app.models import models, schema
 from app.models.crud import (
     get_welfare_by_id, create_bookmark, get_active_welfares, get_user_bookmarks, delete_bookmark,
-    create_welfare_view_log, get_user_recent_welfare_views, get_popular_welfares
+    create_welfare_view_log, get_user_recent_welfare_views, get_popular_welfares as crud_get_popular_welfares
 )
 from app.services.auth_service import get_optional_user, require_level
 from app.services.welfare_service import search_welfare_with_profile
@@ -202,7 +202,7 @@ def get_active_welfare_list(
 
 
 @router.get("/recommend/popular", response_model=List[schema.WelfareItem])
-def get_popular_welfares(
+def read_popular_welfares(
     limit: int = Query(10, ge=1, le=50, description="반환할 복지 정보 개수"),
     db: Session = Depends(get_db)
 ):
@@ -210,7 +210,7 @@ def get_popular_welfares(
     인기 복지 정보 조회 (조회수 기준)
     - Level 1 (비회원) 이상 접근 가능
     """
-    welfares = get_popular_welfares(db, limit=limit)
+    welfares = crud_get_popular_welfares(db, limit=limit)
     return welfares
 
 
@@ -231,4 +231,27 @@ def get_recent_welfares(
     view_logs = get_user_recent_welfare_views(db, current_user.id, limit=limit)
     welfares = [log.welfare for log in view_logs if log.welfare]
     return welfares
+
+
+@router.get("/{welfare_id}", response_model=schema.WelfareDetail)
+def get_welfare_detail(
+    welfare_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    복지 정보 상세 조회
+    - Level 1 (비회원) 이상 접근 가능
+    - 조회수 증가 (비동기 처리)
+    """
+    welfare = get_welfare_by_id(db, welfare_id)
+    if not welfare:
+        raise HTTPException(status_code=404, detail="복지 정보를 찾을 수 없습니다.")
+    
+    # 조회수 증가 (비동기 처리)
+    user_id = current_user.id if current_user else None
+    background_tasks.add_task(increment_welfare_view_count, db, welfare_id, user_id)
+    
+    return welfare
 

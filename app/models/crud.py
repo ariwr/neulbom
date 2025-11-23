@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from sqlalchemy.exc import IntegrityError
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Set
 from datetime import date, datetime
 import secrets
 import string
@@ -31,6 +31,10 @@ def create_user(db: Session, user: schema.UserSignup) -> models.User:
         db_user = models.User(
             email=user.email,
             hashed_password=hashed_password,
+            name=user.name,
+            age=user.age,
+            region=user.region,
+            care_target=user.care_target,
             level=2  # 회원가입 시 Level 2 부여
         )
         db.add(db_user)
@@ -131,7 +135,8 @@ def search_welfares(
         query = query.filter(
             or_(
                 models.Welfare.title.contains(keyword),
-                models.Welfare.summary.contains(keyword)
+                models.Welfare.summary.contains(keyword),
+                models.Welfare.full_text.contains(keyword)  # full_text도 검색에 포함
             )
         )
     
@@ -622,6 +627,42 @@ def check_post_bookmarked(db: Session, user_id: int, post_id: int) -> bool:
     return bookmark is not None
 
 
+def get_user_liked_post_ids(db: Session, user_id: int, post_ids: List[int]) -> set:
+    """
+    사용자가 좋아요를 누른 게시글 ID 세트를 Bulk 조회
+    - N+1 문제 해결용
+    """
+    if not post_ids:
+        return set()
+    
+    likes = db.query(models.PostLike.post_id).filter(
+        and_(
+            models.PostLike.user_id == user_id,
+            models.PostLike.post_id.in_(post_ids)
+        )
+    ).all()
+    
+    return {like.post_id for like in likes}
+
+
+def get_user_bookmarked_post_ids(db: Session, user_id: int, post_ids: List[int]) -> set:
+    """
+    사용자가 북마크한 게시글 ID 세트를 Bulk 조회
+    - N+1 문제 해결용
+    """
+    if not post_ids:
+        return set()
+    
+    bookmarks = db.query(models.PostBookmark.post_id).filter(
+        and_(
+            models.PostBookmark.user_id == user_id,
+            models.PostBookmark.post_id.in_(post_ids)
+        )
+    ).all()
+    
+    return {bookmark.post_id for bookmark in bookmarks}
+
+
 def get_user_post_bookmarks(
     db: Session,
     user_id: int,
@@ -733,6 +774,33 @@ def update_chat_room_title(db: Session, room_id: int, user_id: int, title: str) 
         safe_rollback(db)
         logger.error(f"채팅방 제목 수정 실패: room_id={room_id}, user_id={user_id}, error={e}", exc_info=True)
         raise
+
+
+def get_chat_logs_by_room(db: Session, room_id: int, limit: int = 50) -> List[Dict]:
+    """
+    채팅방의 메시지 히스토리 조회
+    - 최근 N개 메시지를 시간순으로 반환
+    - LLM에 전달할 수 있는 형식으로 변환: [{"role": "user/assistant", "content": "..."}]
+    """
+    try:
+        logs = db.query(models.ChatLog).filter(
+            models.ChatLog.room_id == room_id
+        ).order_by(
+            models.ChatLog.created_at.asc()
+        ).limit(limit).all()
+        
+        # LLM 형식으로 변환
+        history = []
+        for log in logs:
+            history.append({
+                "role": "user" if log.is_user else "assistant",
+                "content": log.message
+            })
+        
+        return history
+    except Exception as e:
+        logger.error(f"채팅 히스토리 조회 실패: room_id={room_id}, error={e}", exc_info=True)
+        return []
 
 
 def delete_chat_room(db: Session, room_id: int, user_id: int) -> bool:
