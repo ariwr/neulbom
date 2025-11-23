@@ -1,76 +1,69 @@
-# 늘봄 백엔드 API
+# 늘봄 프론트엔드
 
-AI 정서 지원 및 복지 정보 매칭 플랫폼 백엔드 서버
+AI 정서 지원 및 복지 정보 매칭 플랫폼 프론트엔드 (React + TypeScript + Vite)
 
 ## 기술 스택
 
-- **Framework**: FastAPI
-- **Database**: SQLite (SQLAlchemy ORM)
-- **Authentication**: JWT (JSON Web Token)
-- **AI**: Gemini / Upstage (챗봇, RAG)
+- **Framework**: React 18 + TypeScript
+- **Build Tool**: Vite
+- **UI Library**: Radix UI + Tailwind CSS
+- **State Management**: React Hooks
 
 ## 프로젝트 구조
 
 ```
-neulbom-backend/
-├── app/
-│   ├── main.py              # FastAPI 앱 진입점
-│   ├── database.py          # DB 연결 설정
-│   ├── models.py            # DB 모델 정의
-│   ├── schemas.py           # Pydantic 스키마
-│   ├── crud.py              # CRUD 함수
-│   ├── core/
-│   │   ├── config.py        # 환경변수 설정
-│   │   └── security.py      # JWT 인증
-│   ├── routers/
-│   │   ├── auth.py          # 인증 API
-│   │   ├── chat.py          # 챗봇 API
-│   │   ├── welfare.py       # 복지 정보 API
-│   │   └── community.py     # 커뮤니티 API
-│   └── services/
-│       ├── llm_chat.py      # AI 챗봇 로직
-│       └── rag_search.py    # RAG 검색 로직
-├── data/                    # RAG용 데이터
-├── requirements.txt         # Python 의존성
-└── .env.example            # 환경변수 예시
+neulbom-frontend/
+├── src/
+│   ├── components/      # 재사용 가능한 컴포넌트
+│   ├── pages/          # 페이지 컴포넌트
+│   ├── services/        # API 서비스 레이어
+│   ├── config/         # 설정 파일 (API 설정 등)
+│   └── styles/         # 스타일 파일
+├── package.json
+└── vite.config.ts
 ```
 
 ## 설치 및 실행
 
-### 1. 가상환경 생성 및 활성화
+### 1. 의존성 설치
 
 ```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
+npm install
 ```
 
-### 2. 의존성 설치
+### 2. 환경 변수 설정 (선택사항)
+
+`.env` 파일을 생성하여 API 서버 주소를 설정할 수 있습니다:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+기본값은 `http://localhost:8000`입니다.
+
+### 3. 개발 서버 실행
 
 ```bash
-pip install -r requirements.txt
+npm run dev
 ```
 
-### 3. 환경변수 설정
+프론트엔드는 `http://localhost:3000`에서 실행됩니다.
 
-`.env.example`을 참고하여 `.env` 파일을 생성하고 필요한 값들을 설정하세요:
+### 4. 백엔드 서버 실행
+
+별도 터미널에서 백엔드 서버를 실행해야 합니다:
 
 ```bash
-# .env 파일 생성
-cp .env.example .env
-
-# .env 파일 편집
-# GEMINI_API_KEY=your-gemini-api-key
-# UPSTAGE_API_KEY=your-upstage-api-key
-# DEFAULT_LLM_PROVIDER=gemini  # 또는 upstage
-# SECRET_KEY=your-secret-key
+cd ../neulbom-backend
+# 가상환경 활성화 후
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 4. 데이터베이스 초기화
+## API 연결
 
-앱을 실행하면 자동으로 SQLite 데이터베이스가 생성됩니다.
+프론트엔드는 백엔드 API와 자동으로 연결됩니다:
+- **개발 환경**: Vite 프록시를 통해 `/api` 요청이 `http://localhost:8000`으로 전달됩니다.
+- **프로덕션**: `.env` 파일의 `VITE_API_BASE_URL`을 사용합니다.
 
 ### 5. 서버 실행
 
@@ -120,6 +113,8 @@ python -m uvicorn app.main:app --reload
 
 - `POST /api/chat/message` - 챗봇 메시지 전송
   - Level 1 (비회원) 이상 접근 가능
+- `GET /api/chat/rooms` - 채팅방 목록 조회
+- 채팅방 관리 (생성/수정/삭제)
 
 ### 복지 정보 (Welfare)
 
@@ -136,6 +131,9 @@ python -m uvicorn app.main:app --reload
   - Level 3 (검증 회원) 이상 접근 가능
 - `GET /api/community/posts` - 게시글 목록 조회
   - Level 3 (검증 회원) 이상 접근 가능
+- 게시글 수정/삭제
+- 좋아요/북마크 기능
+- 댓글 기능
 
 ## 등급 시스템
 
@@ -171,49 +169,56 @@ python -m uvicorn app.main:app --reload
 - AI 기반 위기 감지 모니터링
 - 등급 기반 접근 제어 (Level 3 이상)
 
-## LLM API 설정
+## 빌드
 
-### 지원하는 LLM Provider
-- **Gemini** (Google): 기본 제공자
-- **Upstage**: 한국어 최적화 LLM
+프로덕션 빌드:
 
-### 사용 방법
-1. `.env` 파일에 API 키 설정:
-   ```env
-   GEMINI_API_KEY=your-gemini-api-key
-   UPSTAGE_API_KEY=your-upstage-api-key
-   DEFAULT_LLM_PROVIDER=gemini  # 또는 upstage
-   ```
+```bash
+npm run build
+```
 
-2. 코드에서 특정 provider 지정 (선택사항):
-   ```python
-   # Gemini 사용
-   response = llm_client.generate_chat_response(
-       message="안녕하세요",
-       history=[],
-       system_prompt="...",
-       provider="gemini"
-   )
-   
-   # Upstage 사용
-   response = llm_client.generate_chat_response(
-       message="안녕하세요",
-       history=[],
-       system_prompt="...",
-       provider="upstage"
-   )
-   ```
+빌드된 파일은 `build/` 디렉토리에 생성됩니다.
 
-## TODO
+## 개발 가이드
 
-- [x] LLM API 통합 (Gemini/Upstage)
-- [ ] RAG 벡터 DB 구축 (Chroma/FAISS)
-- [ ] 복지 정보 크롤링 및 데이터 파이프라인
-- [ ] AI 심사 프로세스 구현
-- [ ] 관리자 알림 시스템
-- [ ] 프로덕션 환경 설정
+### API 서비스 추가
+
+새로운 API 엔드포인트를 사용하려면 `src/services/` 디렉토리에 서비스 파일을 추가하고 `src/config/api.ts`의 헬퍼 함수를 사용하세요:
+
+```typescript
+import { apiGet, apiPost } from '../config/api';
+
+export async function fetchData() {
+  return apiGet<DataType>('/api/endpoint');
+}
+```
+
+### 인증 토큰 관리
+
+인증 토큰은 자동으로 localStorage에 저장되며, API 호출 시 자동으로 헤더에 포함됩니다.
+
+```typescript
+import { getAuthToken, setAuthToken } from '../config/api';
+
+// 토큰 가져오기
+const token = getAuthToken();
+
+// 토큰 설정
+setAuthToken('new-token');
+```
+
+## 문제 해결
+
+### CORS 오류
+
+백엔드 서버의 CORS 설정이 프론트엔드 포트(`http://localhost:3000`)를 허용하는지 확인하세요.
+
+### API 연결 실패
+
+1. 백엔드 서버가 실행 중인지 확인 (`http://localhost:8000`)
+2. `.env` 파일의 `VITE_API_BASE_URL`이 올바른지 확인
+3. 브라우저 개발자 도구의 Network 탭에서 요청 상태 확인
 
 ## 라이선스
 
 MIT
-
