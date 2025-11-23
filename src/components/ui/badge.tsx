@@ -1,46 +1,38 @@
-import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
+import React from 'react';
+import { colors } from '../../styles/design-tokens';
 
-import { cn } from "./utils";
-
-const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  },
-);
-
-function Badge({
-  className,
-  variant,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : "span";
-
-  return (
-    <Comp
-      data-slot="badge"
-      className={cn(badgeVariants({ variant }), className)}
-      {...props}
-    />
-  );
+interface BadgeProps {
+  children: React.ReactNode;
+  variant?: 'level1' | 'level2' | 'level3' | 'crisis' | 'default';
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export { Badge, badgeVariants };
+export function Badge({ children, variant = 'default', size = 'md' }: BadgeProps) {
+  const sizes = {
+    sm: 'px-2 py-1 text-xs',
+    md: 'px-3 py-1 text-sm',
+    lg: 'px-4 py-2 text-base',
+  };
+
+  const variants = {
+    level1: { bg: colors.mainGreen1, text: colors.white },
+    level2: { bg: colors.mainGreen2, text: colors.white },
+    level3: { bg: colors.pointYellow, text: colors.textDark },
+    crisis: { bg: colors.error, text: colors.white },
+    default: { bg: colors.lightGray, text: colors.textSub },
+  };
+
+  const style = variants[variant];
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full ${sizes[size]}`}
+      style={{
+        backgroundColor: style.bg,
+        color: style.text,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
