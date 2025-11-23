@@ -1370,3 +1370,6 @@ html {
   syntax: "*";
   inherits: false
 }
+
+.font-bold { font-weight: 600 !important; }
+.font-semibold { font-weight: 500 !important; }

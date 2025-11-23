@@ -62,7 +62,7 @@ export function PostCard({
         )}
 
         {/* Title */}
-        <h3 className="text-base" style={{ color: colors.textDark }}>
+        <h3 className="text-base font-bold" style={{ color: colors.textDark }}>
           {title}
         </h3>
     

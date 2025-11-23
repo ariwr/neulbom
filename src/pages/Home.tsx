@@ -43,7 +43,7 @@ export function Home({
         }}
       >
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl text-white mb-6 text-center font-bold">
+          <h1 className="text-3xl text-white mb-6 text-center font-bold">
             어떤 복지 서비스를 찾고 계신가요?
           </h1>
 

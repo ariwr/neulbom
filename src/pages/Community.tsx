@@ -76,10 +76,10 @@ export function Community({
         }}
       >
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl text-white mb-2 text-center">
+          <h1 className="text-3xl text-white mb-1 text-center font-bold">
             익명 커뮤니티
           </h1>
-          <p className="text-xs text-center mb-6" style={{ color: '#fff' }}>
+          <p className="text-s text-center mb-6" style={{ color: '#fff' }}>
             모든 게시글은 닉네임이 아닌 익명으로 작성됩니다.
           </p>
 

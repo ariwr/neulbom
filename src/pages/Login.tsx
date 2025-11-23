@@ -22,12 +22,12 @@ export function Login({ onNavigate }: LoginProps) {
     >
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center mb-2">
             <span className="text-4xl">🍀</span>
             <h1 className="text-3xl text-white font-bold">늘봄</h1>
           </div>
-          <p className="text-sm text-white opacity-90">
+          <p className="text-md text-white opacity-90">
             돌봄가족을 위한 AI 복지 도우미
           </p>
         </div>
