@@ -106,7 +106,10 @@ export function Chat() {
   );
 
   return (
-    <div className="h-screen flex" style={{ backgroundColor: colors.lightGray }}>
+    <div
+      className="min-h-screen pb-20 flex"
+      style={{ backgroundColor: colors.lightGray }}
+    >
       {/* Left Sidebar - Conversation History */}
       <div
         className="w-80 bg-white border-r hidden lg:block"
@@ -220,7 +223,7 @@ export function Chat() {
 
         {/* Input Area */}
         <div
-          className="bg-white border-t p-4"
+          className="bg-white border-t p-4 sticky botton-0"
           style={{ borderColor: colors.lightGray }}
         >
           <div className="max-w-4xl mx-auto flex items-end space-x-3">
