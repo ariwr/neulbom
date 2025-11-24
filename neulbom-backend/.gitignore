@@ -17,7 +17,6 @@ ENV/
 
 # Environment variables
 .env
-.env.local
 
 # IDE
 .vscode/
@@ -33,12 +32,14 @@ Thumbs.db
 # Logs
 *.log
 
-# Data files (large CSV, vector DB, etc.)
-*.csv
+# Data
 data/vector_db/
+data/*.pdf
+data/*.hwp
 *.pkl
 *.index
 *.faiss
+*.csv
 
 # Testing
 .pytest_cache/
@@ -50,18 +51,14 @@ test_*.py
 *_test.py
 scripts/test_*.py
 
-# Backup directories
-backup_*/
-
-# Temporary/utility scripts (개발용 임시 스크립트)
-analyze_welfare_data.py
-fix_html_entities.py
-update_source_link_from_site.py
-process_csv.py
-generate_summaries.py
-check_*.py
-diagnose.py
-fix_*.py
-test_*.py
-server_startup.log
-
+# Frontend files (프론트엔드 파일이 혼재되어 있어서 추가)
+src/
+index.html
+vite.config.ts
+package.json
+package-lock.json
+node_modules/
+.vite/
+build/
+dist/
+*.tsbuildinfo
