@@ -10,8 +10,7 @@ C타입 복지의 사각지대에 놓인 사람들 위한 서비스 (ex. 위안�
 삼위일체 – 김시연, 이유진, 임정민
 
 ## 시연 영상
-Youtube 링크 - https://youtube.com/channel/UCqw83Hrrls5O79R8MEme8XA?si=5_2WC3I_xzrIDLtX
-
+Youtube 링크 - https://youtu.be/WA78WV_-uKs?si=m2kjBQ1Kv10dsvZ0
 ## 서비스 소개
 
 ### 서비스 개요
